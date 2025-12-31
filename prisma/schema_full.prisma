@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  name        String
+  role        String   @default("admin")
+  createdAt   DateTime @default(now())
+  
+  clients     Client[]
+  contacts    Contact[]
+  
+  @@index([email])
+}
+
+model Client {
+  id              String     @id @default(cuid())
+  name            String
+  phones          String
+  email           String?
+  notes           String?
+  userId          String?
+  accessToken     String?    @unique
+  commissionType  String     @default("percentage") // percentage, fixed
+  commissionRate  Float      @default(15) // 15% or fixed amount
+  cutoffDay       Int        @default(1) // day of month for billing
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  user        User?      @relation(fields: [userId], references: [id])
+  properties  Property[]
+  documents   Document[]
+  
+  @@index([userId])
+}
+
+model Property {
+  id                    String   @id @default(cuid())
+  name                  String
+  address               String
+  clientId              String
+  propertyType          String   @default("casa")
+  regime                String   @default("independiente")
+  
+  condoName             String?
+  condoAdminName        String?
+  condoAdminPhone       String?
+  condoFee              String?
+  
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  client                Client   @relation(fields: [clientId], references: [id])
+  photos                Photo[]
+  expenses              Expense[]
+  reservations          Reservation[]
+  
+  @@index([clientId])
+  @@index([name])
+  @@index([regime])
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  propertyId    String
+  type          String   // luz, agua, telefono, predial, fideicomiso, gas, internet, mantenimiento, otro
+  name          String   // nombre personalizado si es "otro"
+  amount        Float
+  periodicity   String   @default("mensual") // mensual, bimestral, trimestral, semestral, anual
+  dueDay        Int?     // día del mes que vence (1-31)
+  dueMonth      Int?     // mes que vence (para anuales/semestrales)
+  accountNumber String?  // número de cuenta/servicio
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  payments      Payment[]
+  
+  @@index([propertyId])
+  @@index([type])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  expenseId   String
+  amount      Float
+  paidDate    DateTime
+  period      String   // "2024-01" para enero 2024
+  notes       String?
+  createdAt   DateTime @default(now())
+  
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  
+  @@index([expenseId])
+  @@index([period])
+}
+
+model Photo {
+  id          String   @id @default(cuid())
+  propertyId  String
+  url         String
+  caption     String?
+  createdAt   DateTime @default(now())
+  
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  @@index([propertyId])
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  clientId    String?
+  contactId   String?
+  docType     String
+  filename    String
+  url         String
+  createdAt   DateTime @default(now())
+  
+  client      Client?   @relation(fields: [clientId], references: [id])
+  contact     Contact?  @relation(fields: [contactId], references: [id])
+  
+  @@index([clientId])
+  @@index([contactId])
+  @@index([docType])
+}
+
+model Contact {
+  id          String     @id @default(cuid())
+  name        String
+  phones      String
+  email       String?
+  category    String     @default("familia")
+  birthday    String?
+  address     String?
+  notes       String?
+  userId      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  user        User?      @relation(fields: [userId], references: [id])
+  documents   Document[]
+  
+  @@index([category])
+  @@index([name])
+  @@index([userId])
+}
+
+
+model Reservation {
+  id            String   @id @default(cuid())
+  propertyId    String
+  
+  // Guest info
+  guestName     String
+  guestEmail    String?
+  guestPhone    String?
+  guestCountry  String?
+  guestPassport String?
+  numGuests     Int      @default(1)
+  
+  // Dates
+  checkIn       DateTime
+  checkOut      DateTime
+  
+  // Booking details
+  platform      String   @default("directo") // airbnb, booking, vrbo, directo
+  status        String   @default("confirmada") // pendiente, confirmada, checkin, checkout, cancelada
+  
+  // Financials
+  totalAmount   Float?
+  paidAmount    Float?   @default(0)
+  currency      String   @default("MXN")
+  
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  documents     GuestDocument[]
+  
+  @@index([propertyId])
+  @@index([checkIn])
+  @@index([checkOut])
+  @@index([status])
+}
+
+
+model GuestDocument {
+  id            String   @id @default(cuid())
+  reservationId String
+  docType       String   // pasaporte, visa, identificacion, otro
+  filename      String
+  url           String
+  createdAt     DateTime @default(now())
+  
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  
+  @@index([reservationId])
+}
+
+
+model ContractTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  filename    String
+  url         String
+  variables   String?  // JSON array of detected variables
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  contracts   Contract[]
+}
+
+model Contract {
+  id            String   @id @default(cuid())
+  templateId    String
+  reservationId String?
+  propertyId    String?
+  clientId      String?
+  filename      String
+  url           String
+  generatedAt   DateTime @default(now())
+  
+  template      ContractTemplate @relation(fields: [templateId], references: [id])
+  
+  @@index([templateId])
+  @@index([reservationId])
+}
+
+
+model Invoice {
+  id            String   @id @default(cuid())
+  clientId      String
+  period        String   // "2024-12"
+  totalIncome   Float
+  totalExpenses Float
+  commission    Float
+  netAmount     Float    // amount to pay to client
+  status        String   @default("draft") // draft, sent, paid
+  sentAt        DateTime?
+  paidAt        DateTime?
+  pdfUrl        String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  
+  @@unique([clientId, period])
+  @@index([clientId])
+  @@index([period])
+  @@index([status])
+}
+
+
+model ChatRoom {
+  id          String   @id @default(cuid())
+  name        String?
+  type        String   @default("direct")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+  
+  @@index([type])
+}
+
+model ChatParticipant {
+  id        String   @id @default(cuid())
+  roomId    String
+  name      String
+  role      String   @default("member")
+  joinedAt  DateTime @default(now())
+  lastRead  DateTime @default(now())
+  
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  
+  @@unique([roomId, name])
+  @@index([roomId])
+}
+
+model ChatMessage {
+  id            String   @id @default(cuid())
+  roomId        String
+  participantId String
+  content       String
+  type          String   @default("text")
+  fileUrl       String?
+  createdAt     DateTime @default(now())
+  
+  room        ChatRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  participant ChatParticipant @relation(fields: [participantId], references: [id])
+  
+  @@index([roomId])
+  @@index([participantId])
+  @@index([createdAt])
+}
+
+
+model VideoCall {
+  id          String   @id @default(cuid())
+  roomCode    String   @unique
+  creatorName String
+  status      String   @default("waiting")
+  offer       String?  @db.Text
+  answer      String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  candidates  IceCandidate[]
+  
+  @@index([roomCode])
+  @@index([status])
+}
+
+model IceCandidate {
+  id          String   @id @default(cuid())
+  callId      String
+  fromUser    String
+  candidate   String   @db.Text
+  createdAt   DateTime @default(now())
+  
+  call        VideoCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  
+  @@index([callId])
+}
+
+
+model VideoCall {
+  id          String   @id @default(cuid())
+  roomCode    String   @unique
+  creatorName String
+  status      String   @default("waiting")
+  offer       String?  @db.Text
+  answer      String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  candidates  IceCandidate[]
+  
+  @@index([roomCode])
+  @@index([status])
+}
+
+model IceCandidate {
+  id          String   @id @default(cuid())
+  callId      String
+  fromUser    String
+  candidate   String   @db.Text
+  createdAt   DateTime @default(now())
+  
+  call        VideoCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  
+  @@index([callId])
+}

@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Unidad {
+  id              String   @id @default(cuid())
+  numero          String
+  tipo            String   @default("departamento")
+  planta          Int
+  metros          Float
+  precio          Float
+  precioM2        Float?
+  vista           String?
+  status          String   @default("disponible")
+  notas           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  comprador       Comprador? @relation(fields: [compradorId], references: [id])
+  compradorId     String?
+  pagos           Pago[]
+  
+  @@index([status])
+  @@index([tipo])
+}
+
+model Comprador {
+  id              String   @id @default(cuid())
+  nombre          String
+  telefono        String
+  email           String?
+  rfc             String?
+  direccion       String?
+  notas           String?
+  fechaContacto   DateTime @default(now())
+  status          String   @default("prospecto")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  unidades        Unidad[]
+  pagos           Pago[]
+  documentos      Documento[]
+  
+  @@index([status])
+  @@index([nombre])
+}
+
+model Inversionista {
+  id              String   @id @default(cuid())
+  nombre          String
+  telefono        String
+  email           String?
+  montoInvertido  Float
+  porcentaje      Float?
+  fechaInversion  DateTime
+  notas           String?
+  createdAt       DateTime @default(now())
+  
+  @@index([nombre])
+}
+
+model Pago {
+  id              String   @id @default(cuid())
+  unidadId        String?
+  compradorId     String?
+  concepto        String
+  monto           Float
+  fechaProgramada DateTime
+  fechaPagado     DateTime?
+  status          String   @default("pendiente")
+  comprobante     String?
+  notas           String?
+  createdAt       DateTime @default(now())
+  
+  unidad          Unidad?   @relation(fields: [unidadId], references: [id])
+  comprador       Comprador? @relation(fields: [compradorId], references: [id])
+  
+  @@index([status])
+  @@index([fechaProgramada])
+}
+
+model Fideicomiso {
+  id              String   @id @default(cuid())
+  concepto        String
+  monto           Float
+  tipo            String   @default("aportacion")
+  fecha           DateTime
+  referencia      String?
+  notas           String?
+  createdAt       DateTime @default(now())
+  
+  @@index([tipo])
+  @@index([fecha])
+}
+
+model AvanceObra {
+  id              String   @id @default(cuid())
+  etapa           String
+  porcentaje      Int
+  descripcion     String?
+  fecha           DateTime
+  fotos           String?
+  notas           String?
+  createdAt       DateTime @default(now())
+  
+  @@index([fecha])
+}
+
+model Documento {
+  id              String   @id @default(cuid())
+  compradorId     String?
+  tipo            String
+  nombre          String
+  url             String
+  createdAt       DateTime @default(now())
+  
+  comprador       Comprador? @relation(fields: [compradorId], references: [id])
+  
+  @@index([tipo])
+}
+
+model Gasto {
+  id              String   @id @default(cuid())
+  concepto        String
+  monto           Float
+  categoria       String
+  fecha           DateTime
+  confidencial    Boolean  @default(false)
+  beneficiario    String?
+  notas           String?
+  createdAt       DateTime @default(now())
+  
+  @@index([categoria])
+  @@index([confidencial])
+  @@index([fecha])
+}
