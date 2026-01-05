@@ -145,10 +145,8 @@ export default function HomePage() {
             {/* Compradores */}
             <button onClick={() => handleSectionClick('compradores')}
               className="bg-white/10 backdrop-blur-sm rounded-3xl overflow-hidden shadow-lg border border-white/20 hover:bg-white/20 hover:scale-[1.02] transition-all duration-300 active:scale-95">
-              <div className="w-full aspect-square flex items-center justify-center">
-                <svg className="w-20 h-20 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+              <div className="w-full aspect-square overflow-hidden">
+                <img src="/icon-compradores.png" alt="Compradores" className="w-full h-full object-cover" />
               </div>
               <div className="p-3 text-center">
                 <span className="text-white font-semibold text-lg block">Compradores</span>
