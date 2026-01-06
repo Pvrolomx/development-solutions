@@ -21,9 +21,9 @@ interface Comprador {
   dob: string;
   pob: string;
   nationality: string;
-  immigration: string;
+  docType: string; // 'INE' o 'Pasaporte'
+  ine: string;
   passport: string;
-  passportExp: string;
   passportVenc: string;
   marital: string;
   addressMx: string;
@@ -34,22 +34,13 @@ interface Comprador {
   rfc: string;
   email: string;
   phone: string;
-  ssn: string;
 }
 
-interface RDC {
-  id: string;
-  nombre: string;
-  fecha: string;
-  archivo: string;
-  archivoNombre: string;
-}
+interface RDC { id: string; nombre: string; fecha: string; archivo: string; archivoNombre: string; }
 
 const PIN_CORRECTO = '2835';
-const countries = ["Mexico", "USA", "Canada", "UK", "Germany", "France", "Spain", "Italy", "Other"];
-const immigrationStatuses = ["Turista", "Residente Temporal", "Residente Permanente", "Visa de Trabajo", "Visa de Estudiante", "Otro"];
-const maritalStatuses = ["Soltero/a", "Casado/a", "Divorciado/a", "Viudo/a", "Union Libre"];
-
+const countries = ["México", "EUA", "Canadá"];
+const maritalStatuses = ["Soltero/a", "Casado/a", "Divorciado/a", "Viudo/a", "Unión Libre"];
 const STATUS_COLORS = { disponible: 'bg-green-500', apartado: 'bg-yellow-500', vendido: 'bg-blue-500', escriturado: 'bg-purple-500' };
 const STATUS_LABELS = { disponible: 'Disponible', apartado: 'Apartado', vendido: 'Vendido', escriturado: 'Escriturado' };
 
@@ -61,7 +52,6 @@ export default function HomePage() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(true);
   
-  // Inventario
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [inventarioView, setInventarioView] = useState<'list' | 'form' | 'detail' | 'rdc' | 'galeria'>('list');
   const [editingUnidad, setEditingUnidad] = useState<Unidad | null>(null);
@@ -71,7 +61,6 @@ export default function HomePage() {
   const [rdcForm, setRdcForm] = useState({ nombre: '', fecha: '', archivo: '', archivoNombre: '' });
   const [formData, setFormData] = useState({ nombre: '', tipo: 'departamento', planta: 1, m2: 0, precio: 0, status: 'disponible' as const, vista: '', notas: '', galeria: [] as string[] });
 
-  // Compradores
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [compradoresView, setCompradoresView] = useState<'list' | 'form' | 'detail'>('list');
   const [editingComprador, setEditingComprador] = useState<Comprador | null>(null);
@@ -79,13 +68,12 @@ export default function HomePage() {
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
   const [ocrMessage, setOcrMessage] = useState('');
   const [compradorForm, setCompradorForm] = useState<Omit<Comprador, 'id'>>({
-    name: '', dob: '', pob: '', nationality: 'Mexico', immigration: '',
-    passport: '', passportExp: '', passportVenc: '', marital: 'Soltero/a',
+    name: '', dob: '', pob: '', nationality: 'México', docType: 'INE', ine: '',
+    passport: '', passportVenc: '', marital: 'Soltero/a',
     addressMx: '', addressAbroad: '', occupation: '', company: '',
-    curp: '', rfc: '', email: '', phone: '', ssn: ''
+    curp: '', rfc: '', email: '', phone: ''
   });
 
-  // Load data
   useEffect(() => {
     const savedUnidades = localStorage.getItem('dev_unidades');
     const savedRdc = localStorage.getItem('dev_rdc');
@@ -100,43 +88,18 @@ export default function HomePage() {
   useEffect(() => { localStorage.setItem('dev_compradores', JSON.stringify(compradores)); }, [compradores]);
 
   useEffect(() => {
-    const checkInstalled = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-      const isIosStandalone = (window.navigator as any).standalone === true;
-      setIsInstalled(isStandalone || isIosStandalone);
-    };
-    checkInstalled();
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    mediaQuery.addEventListener('change', checkInstalled);
-    return () => mediaQuery.removeEventListener('change', checkInstalled);
+    const checkInstalled = () => { const isStandalone = window.matchMedia('(display-mode: standalone)').matches; const isIosStandalone = (window.navigator as any).standalone === true; setIsInstalled(isStandalone || isIosStandalone); };
+    checkInstalled(); const mediaQuery = window.matchMedia('(display-mode: standalone)'); mediaQuery.addEventListener('change', checkInstalled); return () => mediaQuery.removeEventListener('change', checkInstalled);
   }, []);
 
-  useEffect(() => {
-    const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+  useEffect(() => { const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
 
-  const handleInstall = async () => {
-    if (deferredPrompt) { deferredPrompt.prompt(); const result = await deferredPrompt.userChoice; if (result.outcome === 'accepted') setIsInstalled(true); setDeferredPrompt(null); }
-    else { alert('Para instalar:\niPhone: Compartir → Agregar a inicio\nAndroid: Menú → Instalar app'); }
-  };
-
-  const handleSectionClick = (section: string) => {
-    if (section === 'gastos') { setShowPinModal(true); }
-    else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); }
-  };
-
+  const handleInstall = async () => { if (deferredPrompt) { deferredPrompt.prompt(); const result = await deferredPrompt.userChoice; if (result.outcome === 'accepted') setIsInstalled(true); setDeferredPrompt(null); } else { alert('Para instalar:\niPhone: Compartir → Agregar a inicio\nAndroid: Menú → Instalar app'); } };
+  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); } };
   const handlePinSubmit = () => { if (pin === PIN_CORRECTO) { setShowPinModal(false); setPin(''); setPinError(false); setActiveSection('gastos'); } else { setPinError(true); } };
 
   // Inventario handlers
-  const handleSaveUnidad = () => {
-    if (!formData.nombre) { alert('Ingresa el nombre'); return; }
-    if (editingUnidad) { setUnidades(unidades.map(u => u.id === editingUnidad.id ? { ...formData, id: editingUnidad.id } : u)); }
-    else { setUnidades([...unidades, { ...formData, id: Date.now().toString() }]); }
-    setFormData({ nombre: '', tipo: 'departamento', planta: 1, m2: 0, precio: 0, status: 'disponible', vista: '', notas: '', galeria: [] });
-    setEditingUnidad(null); setInventarioView('list');
-  };
+  const handleSaveUnidad = () => { if (!formData.nombre) { alert('Ingresa el nombre'); return; } if (editingUnidad) { setUnidades(unidades.map(u => u.id === editingUnidad.id ? { ...formData, id: editingUnidad.id } : u)); } else { setUnidades([...unidades, { ...formData, id: Date.now().toString() }]); } setFormData({ nombre: '', tipo: 'departamento', planta: 1, m2: 0, precio: 0, status: 'disponible', vista: '', notas: '', galeria: [] }); setEditingUnidad(null); setInventarioView('list'); };
   const handleEditUnidad = (u: Unidad) => { setFormData({ nombre: u.nombre, tipo: u.tipo, planta: u.planta, m2: u.m2, precio: u.precio, status: u.status, vista: u.vista, notas: u.notas, galeria: u.galeria || [] }); setEditingUnidad(u); setInventarioView('form'); };
   const handleDeleteUnidad = (id: string) => { if (confirm('¿Eliminar?')) { setUnidades(unidades.filter(u => u.id !== id)); setInventarioView('list'); } };
   const handleAddImages = (e: React.ChangeEvent<HTMLInputElement>) => { const files = e.target.files; if (!files) return; Array.from(files).forEach(file => { const reader = new FileReader(); reader.onload = (ev) => { setFormData(prev => ({ ...prev, galeria: [...prev.galeria, ev.target?.result as string] })); }; reader.readAsDataURL(file); }); };
@@ -146,19 +109,28 @@ export default function HomePage() {
   const handleDeleteRdc = (id: string) => { if (confirm('¿Eliminar?')) { setRdcList(rdcList.filter(r => r.id !== id)); } };
 
   // Compradores handlers
-  const handleCompradorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { setCompradorForm({ ...compradorForm, [e.target.name]: e.target.value }); };
+  const handleCompradorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { 
+    const { name, value } = e.target;
+    setCompradorForm(prev => {
+      const updated = { ...prev, [name]: value };
+      // Si cambia nacionalidad, ajustar docType
+      if (name === 'nationality' && value !== 'México') {
+        updated.docType = 'Pasaporte';
+        updated.ine = '';
+      }
+      return updated;
+    });
+  };
   
   const handleOCRUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     setIsProcessingOCR(true); setOcrMessage('');
     try {
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', file);
+      const formDataUpload = new FormData(); formDataUpload.append('file', file);
       const response = await fetch('/api/ocr', { method: 'POST', body: formDataUpload });
       const data = await response.json();
-      if (data.fields) { setCompradorForm(prev => ({ ...prev, ...data.fields })); setOcrMessage('✓ Campos extraídos automáticamente'); }
-    } catch (error) { console.error('OCR error:', error); setOcrMessage('Error al procesar documento'); }
+      if (data.fields) { setCompradorForm(prev => ({ ...prev, ...data.fields })); setOcrMessage('✓ Campos extraídos'); }
+    } catch (error) { console.error('OCR error:', error); setOcrMessage('Error OCR'); }
     finally { setIsProcessingOCR(false); }
   };
 
@@ -166,14 +138,18 @@ export default function HomePage() {
     if (!compradorForm.name) { alert('Ingresa el nombre'); return; }
     if (editingComprador) { setCompradores(compradores.map(c => c.id === editingComprador.id ? { ...compradorForm, id: editingComprador.id } : c)); }
     else { setCompradores([...compradores, { ...compradorForm, id: Date.now().toString() }]); }
-    setCompradorForm({ name: '', dob: '', pob: '', nationality: 'Mexico', immigration: '', passport: '', passportExp: '', passportVenc: '', marital: 'Soltero/a', addressMx: '', addressAbroad: '', occupation: '', company: '', curp: '', rfc: '', email: '', phone: '', ssn: '' });
+    setCompradorForm({ name: '', dob: '', pob: '', nationality: 'México', docType: 'INE', ine: '', passport: '', passportVenc: '', marital: 'Soltero/a', addressMx: '', addressAbroad: '', occupation: '', company: '', curp: '', rfc: '', email: '', phone: '' });
     setEditingComprador(null); setCompradoresView('list'); setOcrMessage('');
   };
 
-  const handleEditComprador = (c: Comprador) => { setCompradorForm({ name: c.name, dob: c.dob, pob: c.pob, nationality: c.nationality, immigration: c.immigration, passport: c.passport, passportExp: c.passportExp, passportVenc: c.passportVenc, marital: c.marital, addressMx: c.addressMx, addressAbroad: c.addressAbroad, occupation: c.occupation, company: c.company, curp: c.curp, rfc: c.rfc, email: c.email, phone: c.phone, ssn: c.ssn }); setEditingComprador(c); setCompradoresView('form'); };
+  const handleEditComprador = (c: Comprador) => { 
+    setCompradorForm({ name: c.name, dob: c.dob, pob: c.pob, nationality: c.nationality, docType: c.docType || 'INE', ine: c.ine || '', passport: c.passport, passportVenc: c.passportVenc, marital: c.marital, addressMx: c.addressMx, addressAbroad: c.addressAbroad, occupation: c.occupation, company: c.company, curp: c.curp, rfc: c.rfc, email: c.email, phone: c.phone }); 
+    setEditingComprador(c); setCompradoresView('form'); 
+  };
   const handleDeleteComprador = (id: string) => { if (confirm('¿Eliminar?')) { setCompradores(compradores.filter(c => c.id !== id)); setCompradoresView('list'); } };
 
-  const isInternational = compradorForm.nationality !== 'Mexico';
+  const isMexican = compradorForm.nationality === 'México';
+  const showPassport = compradorForm.docType === 'Pasaporte' || !isMexican;
   const stats = { total: unidades.length, disponibles: unidades.filter(u => u.status === 'disponible').length, apartados: unidades.filter(u => u.status === 'apartado').length, vendidos: unidades.filter(u => u.status === 'vendido').length };
   const formatMoney = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 
@@ -210,17 +186,16 @@ export default function HomePage() {
               <>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold text-white">Compradores</h2>
-                  <button onClick={() => { setEditingComprador(null); setCompradorForm({ name: '', dob: '', pob: '', nationality: 'Mexico', immigration: '', passport: '', passportExp: '', passportVenc: '', marital: 'Soltero/a', addressMx: '', addressAbroad: '', occupation: '', company: '', curp: '', rfc: '', email: '', phone: '', ssn: '' }); setCompradoresView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600">+ Nuevo</button>
+                  <button onClick={() => { setEditingComprador(null); setCompradorForm({ name: '', dob: '', pob: '', nationality: 'México', docType: 'INE', ine: '', passport: '', passportVenc: '', marital: 'Soltero/a', addressMx: '', addressAbroad: '', occupation: '', company: '', curp: '', rfc: '', email: '', phone: '' }); setCompradoresView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600">+ Nuevo</button>
                 </div>
                 <div className="space-y-3">
-                  {compradores.length === 0 ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay compradores registrados</div>) : (
+                  {compradores.length === 0 ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay compradores</div>) : (
                     compradores.map(c => (
                       <div key={c.id} onClick={() => { setSelectedComprador(c); setCompradoresView('detail'); }} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 cursor-pointer hover:bg-white/20 transition">
                         <h3 className="text-white font-semibold">{c.name}</h3>
                         <div className="flex gap-3 text-sm text-white/60 mt-1">
                           <span>{c.nationality}</span>
                           {c.phone && <span>📞 {c.phone}</span>}
-                          {c.email && <span>✉️</span>}
                         </div>
                       </div>
                     ))
@@ -233,45 +208,72 @@ export default function HomePage() {
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <h2 className="text-xl font-bold text-white mb-4">{editingComprador ? 'Editar Comprador' : 'Nuevo Comprador'}</h2>
                 
-                {/* OCR Upload */}
                 <div className="mb-4 p-4 bg-blue-500/20 rounded-xl border border-blue-500/30">
                   <label className="block text-white font-medium mb-2">📄 Subir Documento (OCR)</label>
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleOCRUpload} disabled={isProcessingOCR} className="w-full text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-500 file:text-white file:cursor-pointer" />
-                  {isProcessingOCR && <p className="text-blue-300 text-sm mt-2">⏳ Procesando con Google Vision...</p>}
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleOCRUpload} disabled={isProcessingOCR} className="w-full text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-500 file:text-white" />
+                  {isProcessingOCR && <p className="text-blue-300 text-sm mt-2">⏳ Procesando...</p>}
                   {ocrMessage && <p className="text-green-400 text-sm mt-2">{ocrMessage}</p>}
                 </div>
 
                 <div className="space-y-4">
                   <div><label className="block text-white/60 text-sm mb-1">Nombre Completo *</label><input name="name" value={compradorForm.name} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-white/60 text-sm mb-1">Fecha Nacimiento</label><input name="dob" type="date" value={compradorForm.dob} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                     <div><label className="block text-white/60 text-sm mb-1">Lugar Nacimiento</label><input name="pob" value={compradorForm.pob} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                   </div>
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-white/60 text-sm mb-1">Nacionalidad</label><select name="nationality" value={compradorForm.nationality} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white">{countries.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                     <div><label className="block text-white/60 text-sm mb-1">Estado Civil</label><select name="marital" value={compradorForm.marital} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white">{maritalStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                   </div>
-                  {isInternational && (<div><label className="block text-white/60 text-sm mb-1">Estatus Migratorio</label><select name="immigration" value={compradorForm.immigration} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="">-- Seleccionar --</option>{immigrationStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>)}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div><label className="block text-white/60 text-sm mb-1">Pasaporte</label><input name="passport" value={compradorForm.passport} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
-                    <div><label className="block text-white/60 text-sm mb-1">Expedición</label><input name="passportExp" type="date" value={compradorForm.passportExp} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
-                    <div><label className="block text-white/60 text-sm mb-1">Vencimiento</label><input name="passportVenc" type="date" value={compradorForm.passportVenc} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+
+                  {/* Documento de identidad */}
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <label className="block text-white font-medium mb-3">🪪 Documento de Identidad</label>
+                    
+                    {isMexican && (
+                      <div className="mb-3">
+                        <label className="block text-white/60 text-sm mb-1">Tipo de Documento</label>
+                        <select name="docType" value={compradorForm.docType} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white">
+                          <option value="INE">INE</option>
+                          <option value="Pasaporte">Pasaporte</option>
+                        </select>
+                      </div>
+                    )}
+                    
+                    {isMexican && compradorForm.docType === 'INE' && (
+                      <div><label className="block text-white/60 text-sm mb-1">Número de INE</label><input name="ine" value={compradorForm.ine} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" placeholder="Clave de elector" /></div>
+                    )}
+                    
+                    {showPassport && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="block text-white/60 text-sm mb-1">Número Pasaporte</label><input name="passport" value={compradorForm.passport} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                        <div><label className="block text-white/60 text-sm mb-1">Vencimiento</label><input name="passportVenc" type="date" value={compradorForm.passportVenc} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                      </div>
+                    )}
                   </div>
+
                   <div><label className="block text-white/60 text-sm mb-1">Dirección en México</label><input name="addressMx" value={compradorForm.addressMx} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
-                  <div><label className="block text-white/60 text-sm mb-1">Dirección en Extranjero</label><input name="addressAbroad" value={compradorForm.addressAbroad} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  {!isMexican && <div><label className="block text-white/60 text-sm mb-1">Dirección en Extranjero</label><input name="addressAbroad" value={compradorForm.addressAbroad} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>}
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-white/60 text-sm mb-1">Ocupación</label><input name="occupation" value={compradorForm.occupation} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                     <div><label className="block text-white/60 text-sm mb-1">Empresa</label><input name="company" value={compradorForm.company} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-white/60 text-sm mb-1">CURP</label><input name="curp" value={compradorForm.curp} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white uppercase" /></div>
-                    <div><label className="block text-white/60 text-sm mb-1">RFC</label><input name="rfc" value={compradorForm.rfc} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white uppercase" /></div>
-                  </div>
+                  
+                  {isMexican && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><label className="block text-white/60 text-sm mb-1">CURP</label><input name="curp" value={compradorForm.curp} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white uppercase" maxLength={18} /></div>
+                      <div><label className="block text-white/60 text-sm mb-1">RFC</label><input name="rfc" value={compradorForm.rfc} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white uppercase" maxLength={13} /></div>
+                    </div>
+                  )}
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-white/60 text-sm mb-1">Email</label><input name="email" type="email" value={compradorForm.email} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                     <div><label className="block text-white/60 text-sm mb-1">Teléfono</label><input name="phone" value={compradorForm.phone} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                   </div>
-                  <div><label className="block text-white/60 text-sm mb-1">SS# / SIN#</label><input name="ssn" value={compradorForm.ssn} onChange={handleCompradorChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  
                   <div className="flex gap-3 pt-4">
                     <button onClick={handleSaveComprador} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
                     <button onClick={() => setCompradoresView('list')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
@@ -284,12 +286,13 @@ export default function HomePage() {
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <h2 className="text-xl font-bold text-white mb-4">{selectedComprador.name}</h2>
                 <div className="space-y-3 mb-6">
-                  {selectedComprador.nationality && <div className="flex justify-between text-white/80"><span>Nacionalidad:</span><span className="font-semibold">{selectedComprador.nationality}</span></div>}
+                  <div className="flex justify-between text-white/80"><span>Nacionalidad:</span><span className="font-semibold">{selectedComprador.nationality}</span></div>
                   {selectedComprador.dob && <div className="flex justify-between text-white/80"><span>Nacimiento:</span><span className="font-semibold">{selectedComprador.dob}</span></div>}
                   {selectedComprador.pob && <div className="flex justify-between text-white/80"><span>Lugar:</span><span className="font-semibold">{selectedComprador.pob}</span></div>}
-                  {selectedComprador.marital && <div className="flex justify-between text-white/80"><span>Estado Civil:</span><span className="font-semibold">{selectedComprador.marital}</span></div>}
-                  {selectedComprador.immigration && <div className="flex justify-between text-white/80"><span>Migratorio:</span><span className="font-semibold">{selectedComprador.immigration}</span></div>}
+                  <div className="flex justify-between text-white/80"><span>Estado Civil:</span><span className="font-semibold">{selectedComprador.marital}</span></div>
+                  {selectedComprador.ine && <div className="flex justify-between text-white/80"><span>INE:</span><span className="font-semibold">{selectedComprador.ine}</span></div>}
                   {selectedComprador.passport && <div className="flex justify-between text-white/80"><span>Pasaporte:</span><span className="font-semibold">{selectedComprador.passport}</span></div>}
+                  {selectedComprador.passportVenc && <div className="flex justify-between text-white/80"><span>Vence:</span><span className="font-semibold">{selectedComprador.passportVenc}</span></div>}
                   {selectedComprador.addressMx && <div className="pt-2 border-t border-white/20"><span className="text-white/60 text-sm">Dirección MX:</span><p className="text-white">{selectedComprador.addressMx}</p></div>}
                   {selectedComprador.addressAbroad && <div><span className="text-white/60 text-sm">Dirección Extranjero:</span><p className="text-white">{selectedComprador.addressAbroad}</p></div>}
                   {selectedComprador.occupation && <div className="flex justify-between text-white/80"><span>Ocupación:</span><span className="font-semibold">{selectedComprador.occupation}</span></div>}
@@ -298,7 +301,6 @@ export default function HomePage() {
                   {selectedComprador.rfc && <div className="flex justify-between text-white/80"><span>RFC:</span><span className="font-semibold">{selectedComprador.rfc}</span></div>}
                   {selectedComprador.email && <div className="flex justify-between text-white/80"><span>Email:</span><span className="font-semibold">{selectedComprador.email}</span></div>}
                   {selectedComprador.phone && <div className="flex justify-between text-white/80"><span>Teléfono:</span><span className="font-semibold">{selectedComprador.phone}</span></div>}
-                  {selectedComprador.ssn && <div className="flex justify-between text-white/80"><span>SS#:</span><span className="font-semibold">{selectedComprador.ssn}</span></div>}
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => handleEditComprador(selectedComprador)} className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-semibold hover:bg-blue-600">Editar</button>
@@ -332,7 +334,6 @@ export default function HomePage() {
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1"><h3 className="text-white font-semibold">{u.nombre}</h3><span className={`${STATUS_COLORS[u.status]} text-white text-xs px-2 py-1 rounded-full`}>{STATUS_LABELS[u.status]}</span></div>
                             <div className="flex items-center gap-3 text-sm text-white/60"><span>{u.tipo}</span><span>P{u.planta}</span><span>{u.m2}m²</span><span className="text-emerald-400 font-semibold">{formatMoney(u.precio)}</span></div>
-                            {u.galeria && u.galeria.length > 0 && <div className="text-xs text-white/40 mt-1">📷 {u.galeria.length}</div>}
                           </div>
                         </div>
                       </div>
@@ -373,7 +374,7 @@ export default function HomePage() {
                 {selectedUnidad.galeria && selectedUnidad.galeria.length > 0 && (
                   <div className="mb-4">
                     <img src={selectedUnidad.galeria[selectedImageIndex]} alt={selectedUnidad.nombre} className="w-full h-48 object-cover rounded-xl cursor-pointer" onClick={() => setInventarioView('galeria')} />
-                    {selectedUnidad.galeria.length > 1 && (<div className="flex gap-2 mt-2 overflow-x-auto pb-2">{selectedUnidad.galeria.map((img, i) => (<img key={i} src={img} alt={`Foto ${i+1}`} onClick={() => setSelectedImageIndex(i)} className={`w-12 h-12 object-cover rounded-lg cursor-pointer flex-shrink-0 ${i === selectedImageIndex ? 'ring-2 ring-emerald-400' : 'opacity-60'}`} />))}</div>)}
+                    {selectedUnidad.galeria.length > 1 && (<div className="flex gap-2 mt-2 overflow-x-auto pb-2">{selectedUnidad.galeria.map((img, i) => (<img key={i} src={img} onClick={() => setSelectedImageIndex(i)} className={`w-12 h-12 object-cover rounded-lg cursor-pointer flex-shrink-0 ${i === selectedImageIndex ? 'ring-2 ring-emerald-400' : 'opacity-60'}`} />))}</div>)}
                   </div>
                 )}
                 <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-white">{selectedUnidad.nombre}</h2><span className={`${STATUS_COLORS[selectedUnidad.status]} text-white text-sm px-3 py-1 rounded-full`}>{STATUS_LABELS[selectedUnidad.status]}</span></div>
@@ -392,8 +393,8 @@ export default function HomePage() {
             {inventarioView === 'galeria' && selectedUnidad && selectedUnidad.galeria && (
               <div className="fixed inset-0 bg-black z-50 flex flex-col">
                 <div className="flex items-center justify-between p-4"><button onClick={() => setInventarioView('detail')} className="text-white text-2xl">←</button><span className="text-white">{selectedImageIndex + 1} / {selectedUnidad.galeria.length}</span><div className="w-8"></div></div>
-                <div className="flex-1 flex items-center justify-center p-4"><img src={selectedUnidad.galeria[selectedImageIndex]} alt={`Foto ${selectedImageIndex + 1}`} className="max-w-full max-h-full object-contain" /></div>
-                <div className="flex gap-2 p-4 overflow-x-auto">{selectedUnidad.galeria.map((img, i) => (<img key={i} src={img} alt={`Thumb ${i+1}`} onClick={() => setSelectedImageIndex(i)} className={`w-16 h-16 object-cover rounded-lg cursor-pointer flex-shrink-0 ${i === selectedImageIndex ? 'ring-2 ring-emerald-400' : 'opacity-50'}`} />))}</div>
+                <div className="flex-1 flex items-center justify-center p-4"><img src={selectedUnidad.galeria[selectedImageIndex]} className="max-w-full max-h-full object-contain" /></div>
+                <div className="flex gap-2 p-4 overflow-x-auto">{selectedUnidad.galeria.map((img, i) => (<img key={i} src={img} onClick={() => setSelectedImageIndex(i)} className={`w-16 h-16 object-cover rounded-lg cursor-pointer flex-shrink-0 ${i === selectedImageIndex ? 'ring-2 ring-emerald-400' : 'opacity-50'}`} />))}</div>
               </div>
             )}
 
