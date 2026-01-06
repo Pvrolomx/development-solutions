@@ -523,7 +523,7 @@ export default function HomePage() {
   const totalDistribuido = inversionistas.reduce((acc, inv) => acc + inv.inversiones.reduce((a, i) => a + i.distribuciones.reduce((d, dist) => d + dist.monto, 0), 0), 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-teal-800 to-emerald-900">
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 via-teal-500 to-emerald-400">
       <header className="pt-6 pb-4 px-6">
         <div className="max-w-lg mx-auto text-center">
           <div className="flex items-center justify-center gap-3 mb-2">
