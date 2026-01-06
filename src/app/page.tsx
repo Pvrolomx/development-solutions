@@ -112,6 +112,21 @@ interface EtapaObra {
   fotos: FotoAvance[];
 }
 
+// === GASTOS ===
+interface Gasto {
+  id: string;
+  concepto: string;
+  monto: number;
+  fecha: string;
+  categoria: 'construccion' | 'permisos' | 'honorarios' | 'marketing' | 'administrativo' | 'servicios' | 'financiero' | 'otro';
+  proveedor: string;
+  facturado: boolean;
+  comprobante?: string;
+  comprobanteNombre?: string;
+  notas: string;
+}
+
+
 
 const PIN_CORRECTO = '2835';
 const countries = ["México", "EUA", "Canadá"];
@@ -121,6 +136,16 @@ const STATUS_LABELS = { disponible: 'Disponible', apartado: 'Apartado', vendido:
 const PAGO_STATUS_COLORS = { pendiente: 'bg-yellow-500', pagado: 'bg-green-500', vencido: 'bg-red-500' };
 const PAGO_TIPO_LABELS = { enganche: 'Enganche', mensualidad: 'Mensualidad', extraordinario: 'Extraordinario' };
 const INVERSION_TIPO_LABELS = { semilla: 'Capital Semilla', desarrollo: 'Desarrollo', otro: 'Otro' };
+const GASTO_CATEGORIAS = [
+  { value: 'construccion', label: 'Construcción', icon: '🏗️', color: 'bg-orange-500' },
+  { value: 'permisos', label: 'Permisos/Licencias', icon: '📋', color: 'bg-blue-500' },
+  { value: 'honorarios', label: 'Honorarios', icon: '👔', color: 'bg-purple-500' },
+  { value: 'marketing', label: 'Marketing/Ventas', icon: '📢', color: 'bg-pink-500' },
+  { value: 'administrativo', label: 'Administrativo', icon: '📁', color: 'bg-gray-500' },
+  { value: 'servicios', label: 'Servicios', icon: '💡', color: 'bg-yellow-500' },
+  { value: 'financiero', label: 'Financiero', icon: '🏦', color: 'bg-green-500' },
+  { value: 'otro', label: 'Otro', icon: '📦', color: 'bg-slate-500' },
+];
 const ETAPA_STATUS_COLORS = { pendiente: 'bg-gray-500', en_proceso: 'bg-yellow-500', completada: 'bg-green-500' };
 const ETAPA_STATUS_LABELS = { pendiente: 'Pendiente', en_proceso: 'En Proceso', completada: 'Completada' };
 const BANCOS = ['Banorte', 'BBVA', 'Santander', 'Scotiabank', 'HSBC', 'Banamex', 'Otro'];
@@ -176,6 +201,15 @@ export default function HomePage() {
   const [selectedEtapa, setSelectedEtapa] = useState<EtapaObra | null>(null);
   const [editingEtapa, setEditingEtapa] = useState<EtapaObra | null>(null);
   const [etapaForm, setEtapaForm] = useState({ nombre: '', avance: 0, fechaInicio: '', fechaFinEstimada: '', status: 'pendiente' as const, notas: '' });
+  
+  // Gastos state
+  const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [gastosView, setGastosView] = useState<'list' | 'form' | 'detail'>('list');
+  const [selectedGasto, setSelectedGasto] = useState<Gasto | null>(null);
+  const [editingGasto, setEditingGasto] = useState<Gasto | null>(null);
+  const [gastoForm, setGastoForm] = useState({ concepto: '', monto: 0, fecha: '', categoria: 'construccion' as const, proveedor: '', facturado: false, comprobante: '', comprobanteNombre: '', notas: '' });
+  const [filtroCategoria, setFiltroCategoria] = useState<string>('todas');
+
   const [fotoForm, setFotoForm] = useState({ imagen: '', fecha: '', descripcion: '' });
 
   const [distribucionForm, setDistribucionForm] = useState({ monto: 0, fecha: '', concepto: 'rendimiento' as const, notas: '' });
@@ -186,11 +220,13 @@ export default function HomePage() {
     const savedCompradores = localStorage.getItem('dev_compradores');
     const savedInversionistas = localStorage.getItem('dev_inversionistas');
     const savedEtapas = localStorage.getItem('dev_etapas');
+    const savedGastos = localStorage.getItem('dev_gastos');
     if (savedUnidades) setUnidades(JSON.parse(savedUnidades));
     if (savedRdc) setRdcList(JSON.parse(savedRdc));
     if (savedCompradores) setCompradores(JSON.parse(savedCompradores));
     if (savedInversionistas) setInversionistas(JSON.parse(savedInversionistas));
     if (savedEtapas) setEtapas(JSON.parse(savedEtapas));
+    if (savedGastos) setGastos(JSON.parse(savedGastos));
   }, []);
 
   useEffect(() => { localStorage.setItem('dev_unidades', JSON.stringify(unidades)); }, [unidades]);
@@ -198,6 +234,7 @@ export default function HomePage() {
   useEffect(() => { localStorage.setItem('dev_compradores', JSON.stringify(compradores)); }, [compradores]);
   useEffect(() => { localStorage.setItem('dev_inversionistas', JSON.stringify(inversionistas)); }, [inversionistas]);
   useEffect(() => { localStorage.setItem('dev_etapas', JSON.stringify(etapas)); }, [etapas]);
+  useEffect(() => { localStorage.setItem('dev_gastos', JSON.stringify(gastos)); }, [gastos]);
 
   useEffect(() => {
     const checkInstalled = () => { const isStandalone = window.matchMedia('(display-mode: standalone)').matches; const isIosStandalone = (window.navigator as any).standalone === true; setIsInstalled(isStandalone || isIosStandalone); };
@@ -207,7 +244,7 @@ export default function HomePage() {
   useEffect(() => { const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
 
   const handleInstall = async () => { if (deferredPrompt) { deferredPrompt.prompt(); const result = await deferredPrompt.userChoice; if (result.outcome === 'accepted') setIsInstalled(true); setDeferredPrompt(null); } else { alert('Para instalar:\niPhone: Compartir → Agregar a inicio\nAndroid: Menú → Instalar app'); } };
-  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); if (section === 'pagos') setPagosView('list'); if (section === 'inversionistas') setInversionistasView('list'); if (section === 'construccion') setConstruccionView('list'); } };
+  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); setGastosView('list'); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); if (section === 'pagos') setPagosView('list'); if (section === 'inversionistas') setInversionistasView('list'); if (section === 'construccion') setConstruccionView('list'); } };
   const handlePinSubmit = () => { if (pin === PIN_CORRECTO) { setShowPinModal(false); setPin(''); setPinError(false); setActiveSection('gastos'); } else { setPinError(true); } };
 
   // Inventario handlers
@@ -411,6 +448,37 @@ export default function HomePage() {
     }
   };
 
+  
+
+  // Gastos handlers
+  const handleSaveGasto = () => {
+    if (!gastoForm.concepto || !gastoForm.monto) { alert('Ingresa concepto y monto'); return; }
+    if (editingGasto) {
+      setGastos(gastos.map(g => g.id === editingGasto.id ? { ...gastoForm, id: editingGasto.id } : g));
+    } else {
+      setGastos([...gastos, { ...gastoForm, id: Date.now().toString(), fecha: gastoForm.fecha || new Date().toISOString().split('T')[0] }]);
+    }
+    setGastoForm({ concepto: '', monto: 0, fecha: '', categoria: 'construccion', proveedor: '', facturado: false, comprobante: '', comprobanteNombre: '', notas: '' });
+    setEditingGasto(null); setGastosView('list');
+  };
+
+  const handleDeleteGasto = (id: string) => {
+    if (!confirm('¿Eliminar gasto?')) return;
+    setGastos(gastos.filter(g => g.id !== id));
+    setGastosView('list');
+  };
+
+  const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { setGastoForm({ ...gastoForm, comprobante: ev.target?.result as string, comprobanteNombre: file.name }); };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const getCategoriaInfo = (cat: string) => GASTO_CATEGORIAS.find(c => c.value === cat) || GASTO_CATEGORIAS[7];
+
   const handleDeleteFoto = (fotoId: string) => {
     if (!confirm('¿Eliminar foto?') || !selectedEtapa) return;
     setEtapas(etapas.map(e => e.id === selectedEtapa.id ? { ...e, fotos: e.fotos.filter(f => f.id !== fotoId) } : e));
@@ -438,6 +506,18 @@ export default function HomePage() {
   // Construccion stats
   const avanceGeneral = etapas.length > 0 ? Math.round(etapas.reduce((a, e) => a + e.avance, 0) / etapas.length) : 0;
   const etapasCompletadas = etapas.filter(e => e.status === 'completada').length;
+  
+  // Gastos stats
+  const totalGastos = gastos.reduce((a, g) => a + g.monto, 0);
+  const gastosPorCategoria = GASTO_CATEGORIAS.map(cat => ({
+    ...cat,
+    total: gastos.filter(g => g.categoria === cat.value).reduce((a, g) => a + g.monto, 0),
+    count: gastos.filter(g => g.categoria === cat.value).length
+  })).filter(c => c.total > 0);
+  const gastosFiltrados = filtroCategoria === 'todas' ? gastos : gastos.filter(g => g.categoria === filtroCategoria);
+  const mesActual = new Date().toISOString().slice(0, 7);
+  const gastosMesActual = gastos.filter(g => g.fecha.startsWith(mesActual)).reduce((a, g) => a + g.monto, 0);
+
   const etapasEnProceso = etapas.filter(e => e.status === 'en_proceso').length;
 
   const totalDistribuido = inversionistas.reduce((acc, inv) => acc + inv.inversiones.reduce((a, i) => a + i.distribuciones.reduce((d, dist) => d + dist.monto, 0), 0), 0);
@@ -1051,6 +1131,145 @@ export default function HomePage() {
                   </div>
                 </div>
                 {rdcList.length > 0 && (<div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20"><h3 className="text-lg font-bold text-white mb-4">Documentos</h3><div className="space-y-3">{rdcList.map(rdc => (<div key={rdc.id} className="bg-white/10 rounded-xl p-4 flex items-center justify-between"><div><h4 className="text-white font-semibold">{rdc.nombre}</h4><p className="text-white/60 text-sm">{rdc.fecha}</p></div><div className="flex gap-2"><a href={rdc.archivo} download={rdc.archivoNombre} className="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600">📥</a><button onClick={() => handleDeleteRdc(rdc.id)} className="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600">🗑️</button></div></div>))}</div></div>)}
+              </div>
+            )}
+          </div>
+        ) : activeSection === 'gastos' ? (
+          <div className="animate-fadeIn">
+            <button onClick={() => { if (gastosView === 'list') setActiveSection(null); else setGastosView('list'); }} className="mb-4 flex items-center gap-2 text-white/60 hover:text-white transition"><span>←</span> <span>Volver</span></button>
+
+            {gastosView === 'list' && (
+              <>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white">💸 Gastos</h2>
+                  <button onClick={() => { setEditingGasto(null); setGastoForm({ concepto: '', monto: 0, fecha: '', categoria: 'construccion', proveedor: '', facturado: false, comprobante: '', comprobanteNombre: '', notas: '' }); setGastosView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600">+ Gasto</button>
+                </div>
+                
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-red-500/20 rounded-xl p-4 text-center">
+                    <div className="text-2xl font-bold text-red-400">{formatMoney(totalGastos)}</div>
+                    <div className="text-xs text-white/60">Total Gastado</div>
+                  </div>
+                  <div className="bg-orange-500/20 rounded-xl p-4 text-center">
+                    <div className="text-2xl font-bold text-orange-400">{formatMoney(gastosMesActual)}</div>
+                    <div className="text-xs text-white/60">Este Mes</div>
+                  </div>
+                </div>
+
+                {/* Desglose por categoria */}
+                {gastosPorCategoria.length > 0 && (
+                  <div className="bg-white/10 rounded-xl p-4 mb-4">
+                    <h3 className="text-white/60 text-sm mb-3">Por Categoría</h3>
+                    <div className="space-y-2">
+                      {gastosPorCategoria.map(cat => (
+                        <div key={cat.value} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span>{cat.icon}</span>
+                            <span className="text-white text-sm">{cat.label}</span>
+                            <span className="text-white/40 text-xs">({cat.count})</span>
+                          </div>
+                          <span className="text-white font-semibold">{formatMoney(cat.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Filtro */}
+                <div className="mb-4">
+                  <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-white text-sm">
+                    <option value="todas">Todas las categorías</option>
+                    {GASTO_CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+                  </select>
+                </div>
+
+                {/* Lista */}
+                <div className="space-y-3">
+                  {gastosFiltrados.length === 0 ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay gastos registrados</div>) : (
+                    gastosFiltrados.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map(g => {
+                      const cat = getCategoriaInfo(g.categoria);
+                      return (
+                        <div key={g.id} onClick={() => { setSelectedGasto(g); setGastosView('detail'); }} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 cursor-pointer hover:bg-white/20 transition">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`${cat.color} w-8 h-8 rounded-lg flex items-center justify-center text-sm`}>{cat.icon}</span>
+                              <div>
+                                <h3 className="text-white font-semibold">{g.concepto}</h3>
+                                <p className="text-white/50 text-xs">{g.proveedor || cat.label}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-red-400 font-bold">{formatMoney(g.monto)}</div>
+                              <div className="text-white/40 text-xs">{g.fecha}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {g.facturado && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">✓ Facturado</span>}
+                            {g.comprobante && <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">📎 Comprobante</span>}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
+
+            {gastosView === 'form' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 className="text-xl font-bold text-white mb-4">{editingGasto ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
+                <div className="space-y-4">
+                  <div><label className="block text-white/60 text-sm mb-1">Concepto *</label><input type="text" value={gastoForm.concepto} onChange={e => setGastoForm({...gastoForm, concepto: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" placeholder="Descripción del gasto" /></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">Monto *</label><input type="number" value={gastoForm.monto} onChange={e => setGastoForm({...gastoForm, monto: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Fecha</label><input type="date" value={gastoForm.fecha} onChange={e => setGastoForm({...gastoForm, fecha: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  </div>
+                  <div><label className="block text-white/60 text-sm mb-1">Categoría</label><select value={gastoForm.categoria} onChange={e => setGastoForm({...gastoForm, categoria: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white">{GASTO_CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}</select></div>
+                  <div><label className="block text-white/60 text-sm mb-1">Proveedor</label><input type="text" value={gastoForm.proveedor} onChange={e => setGastoForm({...gastoForm, proveedor: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" placeholder="Nombre del proveedor" /></div>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" id="facturado" checked={gastoForm.facturado} onChange={e => setGastoForm({...gastoForm, facturado: e.target.checked})} className="w-5 h-5 rounded" />
+                    <label htmlFor="facturado" className="text-white">¿Facturado?</label>
+                  </div>
+                  <div>
+                    <label className="block text-white/60 text-sm mb-1">Comprobante</label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleComprobanteChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-red-500 file:text-white" />
+                    {gastoForm.comprobanteNombre && <p className="text-sm text-green-400 mt-1">✓ {gastoForm.comprobanteNombre}</p>}
+                  </div>
+                  <div><label className="block text-white/60 text-sm mb-1">Notas</label><textarea value={gastoForm.notas} onChange={e => setGastoForm({...gastoForm, notas: e.target.value})} rows={2} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white resize-none" /></div>
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleSaveGasto} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
+                    <button onClick={() => setGastosView('list')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {gastosView === 'detail' && selectedGasto && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`${getCategoriaInfo(selectedGasto.categoria).color} w-12 h-12 rounded-xl flex items-center justify-center text-xl`}>{getCategoriaInfo(selectedGasto.categoria).icon}</span>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{selectedGasto.concepto}</h2>
+                      <p className="text-white/60 text-sm">{getCategoriaInfo(selectedGasto.categoria).label}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-red-400">{formatMoney(selectedGasto.monto)}</div>
+                    <div className="text-white/40 text-sm">{selectedGasto.fecha}</div>
+                  </div>
+                </div>
+                <div className="space-y-3 mb-6">
+                  {selectedGasto.proveedor && <div className="flex justify-between text-white/80"><span>Proveedor:</span><span className="font-semibold">{selectedGasto.proveedor}</span></div>}
+                  <div className="flex justify-between text-white/80"><span>Facturado:</span><span className={`font-semibold ${selectedGasto.facturado ? 'text-green-400' : 'text-white/40'}`}>{selectedGasto.facturado ? 'Sí' : 'No'}</span></div>
+                  {selectedGasto.comprobante && <div className="pt-2"><a href={selectedGasto.comprobante} download={selectedGasto.comprobanteNombre} className="inline-flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">📎 Descargar Comprobante</a></div>}
+                  {selectedGasto.notas && <div className="pt-2 border-t border-white/20"><span className="text-white/60 text-sm">Notas:</span><p className="text-white mt-1">{selectedGasto.notas}</p></div>}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => { setEditingGasto(selectedGasto); setGastoForm({ concepto: selectedGasto.concepto, monto: selectedGasto.monto, fecha: selectedGasto.fecha, categoria: selectedGasto.categoria, proveedor: selectedGasto.proveedor, facturado: selectedGasto.facturado, comprobante: selectedGasto.comprobante || '', comprobanteNombre: selectedGasto.comprobanteNombre || '', notas: selectedGasto.notas }); setGastosView('form'); }} className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-semibold hover:bg-blue-600">Editar</button>
+                  <button onClick={() => handleDeleteGasto(selectedGasto.id)} className="bg-red-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-red-600">Eliminar</button>
+                </div>
               </div>
             )}
           </div>
