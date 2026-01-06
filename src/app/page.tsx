@@ -93,6 +93,25 @@ interface Inversionista {
   documentos: string[];
   inversiones: Inversion[];
 }
+// === CONSTRUCCION ===
+interface FotoAvance {
+  id: string;
+  imagen: string;
+  fecha: string;
+  descripcion: string;
+}
+
+interface EtapaObra {
+  id: string;
+  nombre: string;
+  avance: number;
+  fechaInicio: string;
+  fechaFinEstimada: string;
+  status: 'pendiente' | 'en_proceso' | 'completada';
+  notas: string;
+  fotos: FotoAvance[];
+}
+
 
 const PIN_CORRECTO = '2835';
 const countries = ["México", "EUA", "Canadá"];
@@ -102,6 +121,8 @@ const STATUS_LABELS = { disponible: 'Disponible', apartado: 'Apartado', vendido:
 const PAGO_STATUS_COLORS = { pendiente: 'bg-yellow-500', pagado: 'bg-green-500', vencido: 'bg-red-500' };
 const PAGO_TIPO_LABELS = { enganche: 'Enganche', mensualidad: 'Mensualidad', extraordinario: 'Extraordinario' };
 const INVERSION_TIPO_LABELS = { semilla: 'Capital Semilla', desarrollo: 'Desarrollo', otro: 'Otro' };
+const ETAPA_STATUS_COLORS = { pendiente: 'bg-gray-500', en_proceso: 'bg-yellow-500', completada: 'bg-green-500' };
+const ETAPA_STATUS_LABELS = { pendiente: 'Pendiente', en_proceso: 'En Proceso', completada: 'Completada' };
 const BANCOS = ['Banorte', 'BBVA', 'Santander', 'Scotiabank', 'HSBC', 'Banamex', 'Otro'];
 
 export default function HomePage() {
@@ -148,6 +169,15 @@ export default function HomePage() {
   const [selectedInversion, setSelectedInversion] = useState<Inversion | null>(null);
   const [inversionistaForm, setInversionistaForm] = useState({ nombre: '', tipoPersona: 'fisica' as const, rfc: '', email: '', telefono: '', documentos: [] as string[] });
   const [inversionForm, setInversionForm] = useState({ monto: 0, fechaAportacion: '', tipo: 'desarrollo' as const, porcentaje: 0, rendimientoPactado: 0, plazoMeses: 12, status: 'activa' as const, usaFeg: false, fegBanco: '', fegNumero: '', fegMonto: 0, fegFecha: '' });
+  
+  // Construccion state
+  const [etapas, setEtapas] = useState<EtapaObra[]>([]);
+  const [construccionView, setConstruccionView] = useState<'list' | 'form' | 'detail' | 'foto'>('list');
+  const [selectedEtapa, setSelectedEtapa] = useState<EtapaObra | null>(null);
+  const [editingEtapa, setEditingEtapa] = useState<EtapaObra | null>(null);
+  const [etapaForm, setEtapaForm] = useState({ nombre: '', avance: 0, fechaInicio: '', fechaFinEstimada: '', status: 'pendiente' as const, notas: '' });
+  const [fotoForm, setFotoForm] = useState({ imagen: '', fecha: '', descripcion: '' });
+
   const [distribucionForm, setDistribucionForm] = useState({ monto: 0, fecha: '', concepto: 'rendimiento' as const, notas: '' });
 
   useEffect(() => {
@@ -155,16 +185,19 @@ export default function HomePage() {
     const savedRdc = localStorage.getItem('dev_rdc');
     const savedCompradores = localStorage.getItem('dev_compradores');
     const savedInversionistas = localStorage.getItem('dev_inversionistas');
+    const savedEtapas = localStorage.getItem('dev_etapas');
     if (savedUnidades) setUnidades(JSON.parse(savedUnidades));
     if (savedRdc) setRdcList(JSON.parse(savedRdc));
     if (savedCompradores) setCompradores(JSON.parse(savedCompradores));
     if (savedInversionistas) setInversionistas(JSON.parse(savedInversionistas));
+    if (savedEtapas) setEtapas(JSON.parse(savedEtapas));
   }, []);
 
   useEffect(() => { localStorage.setItem('dev_unidades', JSON.stringify(unidades)); }, [unidades]);
   useEffect(() => { localStorage.setItem('dev_rdc', JSON.stringify(rdcList)); }, [rdcList]);
   useEffect(() => { localStorage.setItem('dev_compradores', JSON.stringify(compradores)); }, [compradores]);
   useEffect(() => { localStorage.setItem('dev_inversionistas', JSON.stringify(inversionistas)); }, [inversionistas]);
+  useEffect(() => { localStorage.setItem('dev_etapas', JSON.stringify(etapas)); }, [etapas]);
 
   useEffect(() => {
     const checkInstalled = () => { const isStandalone = window.matchMedia('(display-mode: standalone)').matches; const isIosStandalone = (window.navigator as any).standalone === true; setIsInstalled(isStandalone || isIosStandalone); };
@@ -174,7 +207,7 @@ export default function HomePage() {
   useEffect(() => { const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
 
   const handleInstall = async () => { if (deferredPrompt) { deferredPrompt.prompt(); const result = await deferredPrompt.userChoice; if (result.outcome === 'accepted') setIsInstalled(true); setDeferredPrompt(null); } else { alert('Para instalar:\niPhone: Compartir → Agregar a inicio\nAndroid: Menú → Instalar app'); } };
-  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); if (section === 'pagos') setPagosView('list'); if (section === 'inversionistas') setInversionistasView('list'); } };
+  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); if (section === 'pagos') setPagosView('list'); if (section === 'inversionistas') setInversionistasView('list'); if (section === 'construccion') setConstruccionView('list'); } };
   const handlePinSubmit = () => { if (pin === PIN_CORRECTO) { setShowPinModal(false); setPin(''); setPinError(false); setActiveSection('gastos'); } else { setPinError(true); } };
 
   // Inventario handlers
@@ -340,6 +373,50 @@ export default function HomePage() {
     }
   };
 
+  
+
+  // Construccion handlers
+  const handleSaveEtapa = () => {
+    if (!etapaForm.nombre) { alert('Ingresa el nombre de la etapa'); return; }
+    if (editingEtapa) {
+      setEtapas(etapas.map(e => e.id === editingEtapa.id ? { ...etapaForm, id: editingEtapa.id, fotos: e.fotos } : e));
+    } else {
+      setEtapas([...etapas, { ...etapaForm, id: Date.now().toString(), fotos: [] }]);
+    }
+    setEtapaForm({ nombre: '', avance: 0, fechaInicio: '', fechaFinEstimada: '', status: 'pendiente', notas: '' });
+    setEditingEtapa(null); setConstruccionView('list');
+  };
+
+  const handleDeleteEtapa = (id: string) => {
+    if (!confirm('¿Eliminar etapa?')) return;
+    setEtapas(etapas.filter(e => e.id !== id));
+    setConstruccionView('list');
+  };
+
+  const handleAddFoto = () => {
+    if (!fotoForm.imagen || !selectedEtapa) return;
+    const newFoto: FotoAvance = { id: Date.now().toString(), ...fotoForm, fecha: fotoForm.fecha || new Date().toISOString().split('T')[0] };
+    setEtapas(etapas.map(e => e.id === selectedEtapa.id ? { ...e, fotos: [...e.fotos, newFoto] } : e));
+    setSelectedEtapa({ ...selectedEtapa, fotos: [...selectedEtapa.fotos, newFoto] });
+    setFotoForm({ imagen: '', fecha: '', descripcion: '' });
+    setConstruccionView('detail');
+  };
+
+  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { setFotoForm({ ...fotoForm, imagen: ev.target?.result as string }); };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDeleteFoto = (fotoId: string) => {
+    if (!confirm('¿Eliminar foto?') || !selectedEtapa) return;
+    setEtapas(etapas.map(e => e.id === selectedEtapa.id ? { ...e, fotos: e.fotos.filter(f => f.id !== fotoId) } : e));
+    setSelectedEtapa({ ...selectedEtapa, fotos: selectedEtapa.fotos.filter(f => f.id !== fotoId) });
+  };
+
   const getComprador = (id?: string) => compradores.find(c => c.id === id);
   
   // Stats
@@ -357,6 +434,12 @@ export default function HomePage() {
   // Inversionistas stats
   const totalInvertido = inversionistas.reduce((acc, inv) => acc + inv.inversiones.filter(i => i.status === 'activa').reduce((a, i) => a + i.monto, 0), 0);
   const totalEnFeg = inversionistas.reduce((acc, inv) => acc + inv.inversiones.filter(i => i.feg?.activo).reduce((a, i) => a + (i.feg?.montoDepositado || 0), 0), 0);
+  
+  // Construccion stats
+  const avanceGeneral = etapas.length > 0 ? Math.round(etapas.reduce((a, e) => a + e.avance, 0) / etapas.length) : 0;
+  const etapasCompletadas = etapas.filter(e => e.status === 'completada').length;
+  const etapasEnProceso = etapas.filter(e => e.status === 'en_proceso').length;
+
   const totalDistribuido = inversionistas.reduce((acc, inv) => acc + inv.inversiones.reduce((a, i) => a + i.distribuciones.reduce((d, dist) => d + dist.monto, 0), 0), 0);
 
   return (
@@ -564,6 +647,144 @@ export default function HomePage() {
               </div>
             )}
           </div>
+        ) : activeSection === 'construccion' ? (
+          <div className="animate-fadeIn">
+            <button onClick={() => { if (construccionView === 'list') setActiveSection(null); else if (construccionView === 'foto') setConstruccionView('detail'); else setConstruccionView('list'); }} className="mb-4 flex items-center gap-2 text-white/60 hover:text-white transition"><span>←</span> <span>Volver</span></button>
+
+            {construccionView === 'list' && (
+              <>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white">🏗️ Construcción</h2>
+                  <button onClick={() => { setEditingEtapa(null); setEtapaForm({ nombre: '', avance: 0, fechaInicio: '', fechaFinEstimada: '', status: 'pendiente', notas: '' }); setConstruccionView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600">+ Etapa</button>
+                </div>
+                
+                {/* Progress General */}
+                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-white font-semibold">Avance General</span>
+                    <span className="text-2xl font-bold text-emerald-400">{avanceGeneral}%</span>
+                  </div>
+                  <div className="h-4 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full transition-all duration-500" style={{ width: `${avanceGeneral}%` }}></div>
+                  </div>
+                  <div className="flex justify-between text-sm text-white/60 mt-2">
+                    <span>{etapasCompletadas} completadas</span>
+                    <span>{etapasEnProceso} en proceso</span>
+                    <span>{etapas.length} total</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {etapas.length === 0 ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay etapas registradas</div>) : (
+                    etapas.map(e => (
+                      <div key={e.id} onClick={() => { setSelectedEtapa(e); setConstruccionView('detail'); }} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 cursor-pointer hover:bg-white/20 transition">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-white font-semibold">{e.nombre}</h3>
+                          <span className={`${ETAPA_STATUS_COLORS[e.status]} text-white text-xs px-2 py-1 rounded-full`}>{ETAPA_STATUS_LABELS[e.status]}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${e.avance}%` }}></div>
+                          </div>
+                          <span className="text-emerald-400 font-semibold text-sm">{e.avance}%</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-white/50">
+                          {e.fechaInicio && <span>Inicio: {e.fechaInicio}</span>}
+                          {e.fotos.length > 0 && <span>📷 {e.fotos.length} fotos</span>}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {construccionView === 'form' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 className="text-xl font-bold text-white mb-4">{editingEtapa ? 'Editar Etapa' : 'Nueva Etapa'}</h2>
+                <div className="space-y-4">
+                  <div><label className="block text-white/60 text-sm mb-1">Nombre *</label><input type="text" value={etapaForm.nombre} onChange={e => setEtapaForm({...etapaForm, nombre: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" placeholder="Ej: Cimentación, Estructura..." /></div>
+                  <div><label className="block text-white/60 text-sm mb-1">Avance (%)</label><input type="range" min="0" max="100" value={etapaForm.avance} onChange={e => setEtapaForm({...etapaForm, avance: parseInt(e.target.value)})} className="w-full" /><div className="text-center text-emerald-400 font-bold text-xl">{etapaForm.avance}%</div></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">Fecha Inicio</label><input type="date" value={etapaForm.fechaInicio} onChange={e => setEtapaForm({...etapaForm, fechaInicio: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Fecha Fin Est.</label><input type="date" value={etapaForm.fechaFinEstimada} onChange={e => setEtapaForm({...etapaForm, fechaFinEstimada: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  </div>
+                  <div><label className="block text-white/60 text-sm mb-1">Status</label><select value={etapaForm.status} onChange={e => setEtapaForm({...etapaForm, status: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="pendiente">Pendiente</option><option value="en_proceso">En Proceso</option><option value="completada">Completada</option></select></div>
+                  <div><label className="block text-white/60 text-sm mb-1">Notas</label><textarea value={etapaForm.notas} onChange={e => setEtapaForm({...etapaForm, notas: e.target.value})} rows={2} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white resize-none" /></div>
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleSaveEtapa} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
+                    <button onClick={() => setConstruccionView('list')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {construccionView === 'detail' && selectedEtapa && (
+              <>
+                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 mb-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{selectedEtapa.nombre}</h2>
+                      <span className={`${ETAPA_STATUS_COLORS[selectedEtapa.status]} text-white text-xs px-2 py-1 rounded-full`}>{ETAPA_STATUS_LABELS[selectedEtapa.status]}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingEtapa(selectedEtapa); setEtapaForm({ nombre: selectedEtapa.nombre, avance: selectedEtapa.avance, fechaInicio: selectedEtapa.fechaInicio, fechaFinEstimada: selectedEtapa.fechaFinEstimada, status: selectedEtapa.status, notas: selectedEtapa.notas }); setConstruccionView('form'); }} className="bg-blue-500 text-white p-2 rounded-lg text-sm">✏️</button>
+                      <button onClick={() => handleDeleteEtapa(selectedEtapa.id)} className="bg-red-500 text-white p-2 rounded-lg text-sm">🗑️</button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex-1 h-3 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${selectedEtapa.avance}%` }}></div>
+                    </div>
+                    <span className="text-emerald-400 font-bold">{selectedEtapa.avance}%</span>
+                  </div>
+                  {selectedEtapa.fechaInicio && <p className="text-white/60 text-sm">📅 Inicio: {selectedEtapa.fechaInicio}</p>}
+                  {selectedEtapa.fechaFinEstimada && <p className="text-white/60 text-sm">🏁 Fin est.: {selectedEtapa.fechaFinEstimada}</p>}
+                  {selectedEtapa.notas && <p className="text-white/40 text-sm mt-2">{selectedEtapa.notas}</p>}
+                </div>
+
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold text-white">📷 Fotos de Avance</h3>
+                  <button onClick={() => { setFotoForm({ imagen: '', fecha: '', descripcion: '' }); setConstruccionView('foto'); }} className="bg-emerald-500 text-white py-2 px-3 rounded-xl text-sm font-semibold hover:bg-emerald-600">+ Foto</button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedEtapa.fotos.length === 0 ? (<div className="col-span-2 bg-white/10 rounded-xl p-4 text-center text-white/60 text-sm">Sin fotos</div>) : (
+                    selectedEtapa.fotos.map(f => (
+                      <div key={f.id} className="bg-white/10 rounded-xl overflow-hidden border border-white/20">
+                        <img src={f.imagen} alt={f.descripcion} className="w-full h-32 object-cover" />
+                        <div className="p-2">
+                          <p className="text-white/60 text-xs">{f.fecha}</p>
+                          {f.descripcion && <p className="text-white text-sm truncate">{f.descripcion}</p>}
+                          <button onClick={() => handleDeleteFoto(f.id)} className="mt-2 text-red-400 text-xs">🗑️ Eliminar</button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {construccionView === 'foto' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 className="text-xl font-bold text-white mb-4">Nueva Foto</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-white/60 text-sm mb-1">Imagen *</label>
+                    <input type="file" accept="image/*" onChange={handleFotoChange} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-500 file:text-white" />
+                    {fotoForm.imagen && <img src={fotoForm.imagen} alt="Preview" className="mt-3 w-full h-40 object-cover rounded-xl" />}
+                  </div>
+                  <div><label className="block text-white/60 text-sm mb-1">Fecha</label><input type="date" value={fotoForm.fecha} onChange={e => setFotoForm({...fotoForm, fecha: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  <div><label className="block text-white/60 text-sm mb-1">Descripción</label><input type="text" value={fotoForm.descripcion} onChange={e => setFotoForm({...fotoForm, descripcion: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" placeholder="Avance de la etapa..." /></div>
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleAddFoto} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
+                    <button onClick={() => setConstruccionView('detail')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
         ) : activeSection === 'pagos' ? (
           <div className="animate-fadeIn">
             <button onClick={() => { if (pagosView === 'list') setActiveSection(null); else if (pagosView === 'form') setPagosView('detail'); else setPagosView('list'); }} className="mb-4 flex items-center gap-2 text-white/60 hover:text-white transition"><span>←</span> <span>Volver</span></button>
