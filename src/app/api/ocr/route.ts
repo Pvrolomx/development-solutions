@@ -29,9 +29,7 @@ export async function POST(request: NextRequest) {
     const data = await response.json()
     const text = data.responses?.[0]?.fullTextAnnotation?.text || ""
 
-    // Parse fields from OCR text (Spanish + English)
     const fields = parseClientFields(text)
-
     return NextResponse.json({ text, fields })
   } catch (error) {
     console.error("OCR Error:", error)
@@ -41,85 +39,108 @@ export async function POST(request: NextRequest) {
 
 function parseClientFields(text: string) {
   const fields: Record<string, string> = {}
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l)
   
-  // === NOMBRE ===
-  // INE: buscar nombre completo (apellidos + nombre)
-  const nombreMatch = text.match(/NOMBRE\s*[:\n]?\s*([A-ZÁÉÍÓÚÑ\s]+)/i) ||
-                      text.match(/Name[:\s]+(.+?)(?:\n|Date)/i)
-  if (nombreMatch) fields.name = nombreMatch[1].trim()
+  // Limpiar texto (quitar saltos de linea extra)
+  const cleanText = text.replace(/\n+/g, ' ').replace(/\s+/g, ' ')
+  
+  // === NAME ===
+  const nameMatch = cleanText.match(/Name:\s*([A-Za-záéíóúñÁÉÍÓÚÑ\s]+?)(?:\s*Date|\s*\*)/i) ||
+                    cleanText.match(/NOMBRE[:\s]*([A-Za-záéíóúñÁÉÍÓÚÑ\s]+?)(?:\s*Fecha|\s*\*)/i)
+  if (nameMatch) fields.name = nameMatch[1].trim()
 
-  // === FECHA NACIMIENTO ===
-  const dobMatch = text.match(/FECHA\s*DE\s*NACIMIENTO[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i) ||
-                   text.match(/NACIMIENTO[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i) ||
-                   text.match(/Date of Birth[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i) ||
-                   text.match(/(\d{2}[\/-]\d{2}[\/-]\d{4})/)
+  // === DATE OF BIRTH ===
+  const dobMatch = cleanText.match(/Date of Birth:\s*(\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4})/i) ||
+                   cleanText.match(/Birth:\s*(\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4})/i) ||
+                   cleanText.match(/NACIMIENTO[:\s]*(\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4})/i)
   if (dobMatch) fields.dob = formatDate(dobMatch[1])
 
-  // === CURP (18 caracteres alfanumericos) ===
-  const curpMatch = text.match(/CURP[:\s]*([A-Z]{4}\d{6}[A-Z]{6}\d{2})/i) ||
-                    text.match(/([A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]{2})/i)
-  if (curpMatch) fields.curp = curpMatch[1].toUpperCase()
+  // === PLACE OF BIRTH ===
+  const pobMatch = cleanText.match(/Place of Birth:\s*([^*]+?)(?:\s*Nationality|\s*\*)/i) ||
+                   cleanText.match(/LUGAR[:\s]*([^*]+?)(?:\s*Nacional|\s*\*)/i)
+  if (pobMatch) fields.pob = pobMatch[1].trim()
 
-  // === CLAVE DE ELECTOR (INE) ===
-  const ineMatch = text.match(/CLAVE\s*DE\s*ELECTOR[:\s]*([A-Z]{6}\d{8}[A-Z]\d{3})/i) ||
-                   text.match(/ELECTOR[:\s]*([A-Z0-9]{18})/i) ||
-                   text.match(/([A-Z]{6}\d{8}[A-Z]\d{3})/i)
-  if (ineMatch) fields.ine = ineMatch[1].toUpperCase()
-
-  // === DOMICILIO / DIRECCION ===
-  const domMatch = text.match(/DOMICILIO[:\s]*(.+?)(?:SECCI[OÓ]N|LOCALIDAD|$)/is) ||
-                   text.match(/CALLE[:\s]*(.+?)(?:COLONIA|CP|$)/is) ||
-                   text.match(/Address[:\s]*(.+?)(?:\n|$)/i)
-  if (domMatch) fields.addressMx = domMatch[1].replace(/\n/g, ', ').trim()
-
-  // === SECCION ELECTORAL ===
-  const seccionMatch = text.match(/SECCI[OÓ]N[:\s]*(\d+)/i)
-  
-  // === ESTADO ===
-  const estadoMatch = text.match(/ESTADO[:\s]*([A-ZÁÉÍÓÚÑ\s]+?)(?:\n|MUNICIPIO|$)/i)
-
-  // === RFC ===
-  const rfcMatch = text.match(/RFC[:\s]*([A-Z]{3,4}\d{6}[A-Z\d]{3})/i)
-  if (rfcMatch) fields.rfc = rfcMatch[1].toUpperCase()
-
-  // === NACIONALIDAD ===
-  const natMatch = text.match(/NACIONALIDAD[:\s]*(\w+)/i) ||
-                   text.match(/Nationality[:\s]*(\w+)/i)
+  // === NATIONALITY ===
+  const natMatch = cleanText.match(/Nationality:\s*(\w+)/i) ||
+                   cleanText.match(/NACIONALIDAD[:\s]*(\w+)/i)
   if (natMatch) {
-    const nat = natMatch[1].toLowerCase()
-    if (nat.includes('mex')) fields.nationality = 'México'
-    else if (nat.includes('usa') || nat.includes('american')) fields.nationality = 'EUA'
-    else if (nat.includes('canad')) fields.nationality = 'Canadá'
+    const nat = natMatch[1].toUpperCase()
+    if (nat === 'USA' || nat === 'AMERICAN' || nat === 'US') fields.nationality = 'EUA'
+    else if (nat.includes('MEX')) fields.nationality = 'México'
+    else if (nat.includes('CANAD')) fields.nationality = 'Canadá'
   }
 
-  // === SEXO (para inferir datos) ===
-  const sexoMatch = text.match(/SEXO[:\s]*(H|M|HOMBRE|MUJER)/i)
-
-  // === PASAPORTE ===
-  const passMatch = text.match(/PASAPORTE[:\s]*([A-Z0-9]+)/i) ||
-                    text.match(/Passport[:\s]*([A-Z0-9]+)/i)
+  // === PASSPORT (numero + fechas) ===
+  const passMatch = cleanText.match(/Passport:\s*(\d+)/i) ||
+                    cleanText.match(/PASAPORTE[:\s]*(\d+)/i)
   if (passMatch) fields.passport = passMatch[1]
+  
+  // Fecha vencimiento pasaporte (segundo par de fechas despues del numero)
+  const passDateMatch = cleanText.match(/Passport:\s*\d+\s*\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4}\s*(\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4})/i)
+  if (passDateMatch) fields.passportVenc = formatDate(passDateMatch[1])
+
+  // === MARITAL STATUS ===
+  const marMatch = cleanText.match(/Marital Status:\s*(\w+)/i) ||
+                   cleanText.match(/Estado Civil[:\s]*(\w+)/i)
+  if (marMatch) {
+    const status = marMatch[1].toLowerCase()
+    if (status === 'married' || status === 'casado') fields.marital = 'Casado/a'
+    else if (status === 'single' || status === 'soltero') fields.marital = 'Soltero/a'
+    else if (status === 'divorced' || status === 'divorciado') fields.marital = 'Divorciado/a'
+    else if (status === 'widowed' || status === 'viudo') fields.marital = 'Viudo/a'
+  }
+
+  // === ADDRESS IN MEXICO ===
+  const addrMxMatch = cleanText.match(/Address in Mexico:\s*(.+?)(?:\s*Address Abroad|\s*Occupation|\s*\*)/i) ||
+                      cleanText.match(/Direccion en Mexico[:\s]*(.+?)(?:\s*Direccion|\s*Ocupacion|\s*\*)/i)
+  if (addrMxMatch) fields.addressMx = addrMxMatch[1].trim()
+
+  // === ADDRESS ABROAD ===
+  const addrAbMatch = cleanText.match(/Address Abroad:\s*(.+?)(?:\s*Occupation|\s*\*)/i) ||
+                      cleanText.match(/Direccion.{0,20}Extranjero[:\s]*(.+?)(?:\s*Ocupacion|\s*\*)/i)
+  if (addrAbMatch) fields.addressAbroad = addrAbMatch[1].trim()
+
+  // === OCCUPATION ===
+  const occMatch = cleanText.match(/Occupation:\s*(\w+)/i) ||
+                   cleanText.match(/OCUPACION[:\s]*(\w+)/i)
+  if (occMatch && occMatch[1].toUpperCase() !== 'N' && occMatch[1].toUpperCase() !== 'NA') {
+    fields.occupation = occMatch[1]
+  }
+
+  // === COMPANY ===
+  const compMatch = cleanText.match(/Name of the Company:\s*([^*]+?)(?:\s*Type|\s*Telephone|\s*\*)/i) ||
+                    cleanText.match(/EMPRESA[:\s]*([^*]+?)(?:\s*Tipo|\s*\*)/i)
+  if (compMatch && !compMatch[1].match(/^N\/?A$/i)) fields.company = compMatch[1].trim()
+
+  // === CURP ===
+  const curpMatch = cleanText.match(/CURP:\s*([A-Z0-9]{18})/i) ||
+                    cleanText.match(/([A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]{2})/i)
+  if (curpMatch && !curpMatch[1].match(/^N\/?A$/i)) fields.curp = curpMatch[1].toUpperCase()
+
+  // === RFC ===
+  const rfcMatch = cleanText.match(/RFC[^:]*:\s*([A-Z0-9]{10,13})/i) ||
+                   cleanText.match(/Tax ID[^:]*:\s*([A-Z0-9]{10,13})/i)
+  if (rfcMatch && !rfcMatch[1].match(/^N\/?A$/i)) fields.rfc = rfcMatch[1].toUpperCase()
 
   // === EMAIL ===
-  const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i)
+  const emailMatch = cleanText.match(/Email:\s*([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i) ||
+                     cleanText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i)
   if (emailMatch) fields.email = emailMatch[1].toLowerCase()
 
-  // === TELEFONO ===
-  const phoneMatch = text.match(/TEL[EÉFONO]*[:\s]*(\+?[\d\s\-()]{10,})/i) ||
-                     text.match(/CEL[ULAR]*[:\s]*(\+?[\d\s\-()]{10,})/i) ||
-                     text.match(/(\+?52[\s\-]?\d{10})/i) ||
-                     text.match(/(\d{3}[\s\-]?\d{3}[\s\-]?\d{4})/i)
-  if (phoneMatch) fields.phone = phoneMatch[1].replace(/[\s\-()]/g, '')
+  // === PHONE ===
+  const phoneMatch = cleanText.match(/Cell Phone:\s*([+\d\s\-()]+?)(?:\s*SS|\s*\*|$)/i) ||
+                     cleanText.match(/Phone:\s*([+\d\s\-()]+?)(?:\s*SS|\s*\*|$)/i) ||
+                     cleanText.match(/TEL[EFONO]*[:\s]*([+\d\s\-()]+?)(?:\s*SS|\s*\*|$)/i)
+  if (phoneMatch) fields.phone = phoneMatch[1].replace(/[\s\-()]/g, '').trim()
 
   return fields
 }
 
 function formatDate(dateStr: string): string {
   const clean = dateStr.replace(/\s/g, "")
-  const parts = clean.split(/[\/\-]/)
+  const parts = clean.split("/")
   if (parts.length === 3) {
     let [d, m, y] = parts
+    // Si el año tiene 4 digitos pero con espacios (ej: "19 42" -> "1942")
     if (y.length === 2) {
       y = parseInt(y) > 50 ? "19" + y : "20" + y
     }
