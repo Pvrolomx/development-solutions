@@ -59,6 +59,24 @@ export default function HomePage() {
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(true); // Start hidden, show only if not installed
+
+  useEffect(() => {
+    // Check if app is already installed as PWA
+    const checkInstalled = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      const isIosStandalone = (window.navigator as any).standalone === true;
+      setIsInstalled(isStandalone || isIosStandalone);
+    };
+    
+    checkInstalled();
+    
+    // Listen for display mode changes
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    mediaQuery.addEventListener('change', checkInstalled);
+    
+    return () => mediaQuery.removeEventListener('change', checkInstalled);
+  }, []);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -72,7 +90,10 @@ export default function HomePage() {
   const handleInstall = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
+      const result = await deferredPrompt.userChoice;
+      if (result.outcome === 'accepted') {
+        setIsInstalled(true);
+      }
       setDeferredPrompt(null);
     } else {
       alert('Para instalar:\n\niPhone: Toca el icono de compartir y selecciona "Agregar a pantalla de inicio"\n\nAndroid/Chrome: Toca el menú (3 puntos) y selecciona "Instalar app"');
@@ -116,13 +137,15 @@ export default function HomePage() {
             </div>
           </div>
           <p className="text-white/60 text-sm">Gestión de desarrollos inmobiliarios</p>
-          <button onClick={handleInstall}
-            className="mt-3 bg-white/20 backdrop-blur-sm text-white px-6 py-2 rounded-full text-sm font-medium hover:bg-white/30 flex items-center gap-2 mx-auto border border-white/30">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Instalar App
-          </button>
+          {!isInstalled && (
+            <button onClick={handleInstall}
+              className="mt-3 bg-white/20 backdrop-blur-sm text-white px-6 py-2 rounded-full text-sm font-medium hover:bg-white/30 flex items-center gap-2 mx-auto border border-white/30">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Instalar App
+            </button>
+          )}
         </div>
       </header>
 
