@@ -51,6 +51,49 @@ interface Comprador {
 
 interface RDC { id: string; nombre: string; fecha: string; archivo: string; archivoNombre: string; }
 
+// === INVERSIONISTAS ===
+interface Distribucion {
+  id: string;
+  monto: number;
+  fecha: string;
+  concepto: 'rendimiento' | 'devolucion';
+  comprobante?: string;
+  notas?: string;
+}
+
+interface FEG {
+  activo: boolean;
+  banco: string;
+  numeroFideicomiso: string;
+  montoDepositado: number;
+  fechaConstitucion: string;
+  documentos: string[];
+}
+
+interface Inversion {
+  id: string;
+  monto: number;
+  fechaAportacion: string;
+  tipo: 'semilla' | 'desarrollo' | 'otro';
+  porcentaje?: number;
+  rendimientoPactado?: number;
+  plazoMeses?: number;
+  status: 'activa' | 'liquidada';
+  feg?: FEG;
+  distribuciones: Distribucion[];
+}
+
+interface Inversionista {
+  id: string;
+  nombre: string;
+  tipoPersona: 'fisica' | 'moral';
+  rfc: string;
+  email: string;
+  telefono: string;
+  documentos: string[];
+  inversiones: Inversion[];
+}
+
 const PIN_CORRECTO = '2835';
 const countries = ["México", "EUA", "Canadá"];
 const maritalStatuses = ["Soltero/a", "Casado/a", "Divorciado/a", "Viudo/a", "Unión Libre"];
@@ -58,6 +101,8 @@ const STATUS_COLORS = { disponible: 'bg-green-500', apartado: 'bg-yellow-500', v
 const STATUS_LABELS = { disponible: 'Disponible', apartado: 'Apartado', vendido: 'Vendido', escriturado: 'Escriturado' };
 const PAGO_STATUS_COLORS = { pendiente: 'bg-yellow-500', pagado: 'bg-green-500', vencido: 'bg-red-500' };
 const PAGO_TIPO_LABELS = { enganche: 'Enganche', mensualidad: 'Mensualidad', extraordinario: 'Extraordinario' };
+const INVERSION_TIPO_LABELS = { semilla: 'Capital Semilla', desarrollo: 'Desarrollo', otro: 'Otro' };
+const BANCOS = ['Banorte', 'BBVA', 'Santander', 'Scotiabank', 'HSBC', 'Banamex', 'Otro'];
 
 export default function HomePage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
@@ -93,22 +138,33 @@ export default function HomePage() {
   const [pagosView, setPagosView] = useState<'list' | 'detail' | 'form'>('list');
   const [selectedUnidadPago, setSelectedUnidadPago] = useState<Unidad | null>(null);
   const [editingPago, setEditingPago] = useState<Pago | null>(null);
-  const [pagoForm, setPagoForm] = useState<Omit<Pago, 'id'>>({
-    monto: 0, fecha: '', tipo: 'mensualidad', status: 'pendiente', notas: ''
-  });
+  const [pagoForm, setPagoForm] = useState<Omit<Pago, 'id'>>({ monto: 0, fecha: '', tipo: 'mensualidad', status: 'pendiente', notas: '' });
+
+  // Inversionistas state
+  const [inversionistas, setInversionistas] = useState<Inversionista[]>([]);
+  const [inversionistasView, setInversionistasView] = useState<'list' | 'form' | 'detail' | 'inversion' | 'distribucion'>('list');
+  const [selectedInversionista, setSelectedInversionista] = useState<Inversionista | null>(null);
+  const [editingInversionista, setEditingInversionista] = useState<Inversionista | null>(null);
+  const [selectedInversion, setSelectedInversion] = useState<Inversion | null>(null);
+  const [inversionistaForm, setInversionistaForm] = useState({ nombre: '', tipoPersona: 'fisica' as const, rfc: '', email: '', telefono: '', documentos: [] as string[] });
+  const [inversionForm, setInversionForm] = useState({ monto: 0, fechaAportacion: '', tipo: 'desarrollo' as const, porcentaje: 0, rendimientoPactado: 0, plazoMeses: 12, status: 'activa' as const, usaFeg: false, fegBanco: '', fegNumero: '', fegMonto: 0, fegFecha: '' });
+  const [distribucionForm, setDistribucionForm] = useState({ monto: 0, fecha: '', concepto: 'rendimiento' as const, notas: '' });
 
   useEffect(() => {
     const savedUnidades = localStorage.getItem('dev_unidades');
     const savedRdc = localStorage.getItem('dev_rdc');
     const savedCompradores = localStorage.getItem('dev_compradores');
+    const savedInversionistas = localStorage.getItem('dev_inversionistas');
     if (savedUnidades) setUnidades(JSON.parse(savedUnidades));
     if (savedRdc) setRdcList(JSON.parse(savedRdc));
     if (savedCompradores) setCompradores(JSON.parse(savedCompradores));
+    if (savedInversionistas) setInversionistas(JSON.parse(savedInversionistas));
   }, []);
 
   useEffect(() => { localStorage.setItem('dev_unidades', JSON.stringify(unidades)); }, [unidades]);
   useEffect(() => { localStorage.setItem('dev_rdc', JSON.stringify(rdcList)); }, [rdcList]);
   useEffect(() => { localStorage.setItem('dev_compradores', JSON.stringify(compradores)); }, [compradores]);
+  useEffect(() => { localStorage.setItem('dev_inversionistas', JSON.stringify(inversionistas)); }, [inversionistas]);
 
   useEffect(() => {
     const checkInstalled = () => { const isStandalone = window.matchMedia('(display-mode: standalone)').matches; const isIosStandalone = (window.navigator as any).standalone === true; setIsInstalled(isStandalone || isIosStandalone); };
@@ -118,7 +174,7 @@ export default function HomePage() {
   useEffect(() => { const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
 
   const handleInstall = async () => { if (deferredPrompt) { deferredPrompt.prompt(); const result = await deferredPrompt.userChoice; if (result.outcome === 'accepted') setIsInstalled(true); setDeferredPrompt(null); } else { alert('Para instalar:\niPhone: Compartir → Agregar a inicio\nAndroid: Menú → Instalar app'); } };
-  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); if (section === 'pagos') setPagosView('list'); } };
+  const handleSectionClick = (section: string) => { if (section === 'gastos') { setShowPinModal(true); } else { setActiveSection(section); if (section === 'inventario') setInventarioView('list'); if (section === 'compradores') setCompradoresView('list'); if (section === 'pagos') setPagosView('list'); if (section === 'inversionistas') setInversionistasView('list'); } };
   const handlePinSubmit = () => { if (pin === PIN_CORRECTO) { setShowPinModal(false); setPin(''); setPinError(false); setActiveSection('gastos'); } else { setPinError(true); } };
 
   // Inventario handlers
@@ -171,50 +227,117 @@ export default function HomePage() {
   const handleSavePago = () => {
     if (!pagoForm.monto || !pagoForm.fecha) { alert('Completa monto y fecha'); return; }
     if (!selectedUnidadPago) return;
-    
     const newPago: Pago = { ...pagoForm, id: editingPago?.id || Date.now().toString() };
-    
     setUnidades(unidades.map(u => {
       if (u.id === selectedUnidadPago.id) {
         const pagos = u.pagos || [];
-        if (editingPago) {
-          return { ...u, pagos: pagos.map(p => p.id === editingPago.id ? newPago : p) };
-        } else {
-          return { ...u, pagos: [...pagos, newPago] };
-        }
+        if (editingPago) { return { ...u, pagos: pagos.map(p => p.id === editingPago.id ? newPago : p) }; }
+        else { return { ...u, pagos: [...pagos, newPago] }; }
       }
       return u;
     }));
-    
     setPagoForm({ monto: 0, fecha: '', tipo: 'mensualidad', status: 'pendiente', notas: '' });
-    setEditingPago(null);
-    setPagosView('detail');
-    // Actualizar selectedUnidadPago
+    setEditingPago(null); setPagosView('detail');
     const updated = unidades.find(u => u.id === selectedUnidadPago.id);
     if (updated) setSelectedUnidadPago({ ...updated, pagos: editingPago ? updated.pagos?.map(p => p.id === editingPago.id ? newPago : p) : [...(updated.pagos || []), newPago] });
   };
 
   const handleDeletePago = (pagoId: string) => {
     if (!confirm('¿Eliminar pago?') || !selectedUnidadPago) return;
-    setUnidades(unidades.map(u => {
-      if (u.id === selectedUnidadPago.id) {
-        return { ...u, pagos: (u.pagos || []).filter(p => p.id !== pagoId) };
-      }
-      return u;
-    }));
+    setUnidades(unidades.map(u => { if (u.id === selectedUnidadPago.id) { return { ...u, pagos: (u.pagos || []).filter(p => p.id !== pagoId) }; } return u; }));
     setSelectedUnidadPago({ ...selectedUnidadPago, pagos: (selectedUnidadPago.pagos || []).filter(p => p.id !== pagoId) });
   };
 
   const handleMarcarPagado = (pago: Pago) => {
     if (!selectedUnidadPago) return;
     const updatedPago = { ...pago, status: 'pagado' as const, fechaPago: new Date().toISOString().split('T')[0] };
-    setUnidades(unidades.map(u => {
-      if (u.id === selectedUnidadPago.id) {
-        return { ...u, pagos: (u.pagos || []).map(p => p.id === pago.id ? updatedPago : p) };
-      }
-      return u;
-    }));
+    setUnidades(unidades.map(u => { if (u.id === selectedUnidadPago.id) { return { ...u, pagos: (u.pagos || []).map(p => p.id === pago.id ? updatedPago : p) }; } return u; }));
     setSelectedUnidadPago({ ...selectedUnidadPago, pagos: (selectedUnidadPago.pagos || []).map(p => p.id === pago.id ? updatedPago : p) });
+  };
+
+  // Inversionistas handlers
+  const handleSaveInversionista = () => {
+    if (!inversionistaForm.nombre) { alert('Ingresa el nombre'); return; }
+    if (editingInversionista) {
+      setInversionistas(inversionistas.map(i => i.id === editingInversionista.id ? { ...inversionistaForm, id: editingInversionista.id, inversiones: i.inversiones } : i));
+    } else {
+      setInversionistas([...inversionistas, { ...inversionistaForm, id: Date.now().toString(), inversiones: [] }]);
+    }
+    setInversionistaForm({ nombre: '', tipoPersona: 'fisica', rfc: '', email: '', telefono: '', documentos: [] });
+    setEditingInversionista(null); setInversionistasView('list');
+  };
+
+  const handleDeleteInversionista = (id: string) => {
+    if (!confirm('¿Eliminar inversionista y todas sus inversiones?')) return;
+    setInversionistas(inversionistas.filter(i => i.id !== id));
+    setInversionistasView('list');
+  };
+
+  const handleSaveInversion = () => {
+    if (!inversionForm.monto || !inversionForm.fechaAportacion) { alert('Completa monto y fecha'); return; }
+    if (!selectedInversionista) return;
+    
+    const newInversion: Inversion = {
+      id: selectedInversion?.id || Date.now().toString(),
+      monto: inversionForm.monto,
+      fechaAportacion: inversionForm.fechaAportacion,
+      tipo: inversionForm.tipo,
+      porcentaje: inversionForm.porcentaje || undefined,
+      rendimientoPactado: inversionForm.rendimientoPactado || undefined,
+      plazoMeses: inversionForm.plazoMeses || undefined,
+      status: inversionForm.status,
+      feg: inversionForm.usaFeg ? { activo: true, banco: inversionForm.fegBanco, numeroFideicomiso: inversionForm.fegNumero, montoDepositado: inversionForm.fegMonto, fechaConstitucion: inversionForm.fegFecha, documentos: [] } : undefined,
+      distribuciones: selectedInversion?.distribuciones || []
+    };
+
+    setInversionistas(inversionistas.map(inv => {
+      if (inv.id === selectedInversionista.id) {
+        if (selectedInversion) { return { ...inv, inversiones: inv.inversiones.map(i => i.id === selectedInversion.id ? newInversion : i) }; }
+        else { return { ...inv, inversiones: [...inv.inversiones, newInversion] }; }
+      }
+      return inv;
+    }));
+
+    setInversionForm({ monto: 0, fechaAportacion: '', tipo: 'desarrollo', porcentaje: 0, rendimientoPactado: 0, plazoMeses: 12, status: 'activa', usaFeg: false, fegBanco: '', fegNumero: '', fegMonto: 0, fegFecha: '' });
+    setSelectedInversion(null); setInversionistasView('detail');
+    // Actualizar selectedInversionista
+    const updated = inversionistas.find(i => i.id === selectedInversionista.id);
+    if (updated) {
+      const newInversiones = selectedInversion ? updated.inversiones.map(i => i.id === selectedInversion.id ? newInversion : i) : [...updated.inversiones, newInversion];
+      setSelectedInversionista({ ...updated, inversiones: newInversiones });
+    }
+  };
+
+  const handleDeleteInversion = (inversionId: string) => {
+    if (!confirm('¿Eliminar inversión?') || !selectedInversionista) return;
+    setInversionistas(inversionistas.map(inv => {
+      if (inv.id === selectedInversionista.id) { return { ...inv, inversiones: inv.inversiones.filter(i => i.id !== inversionId) }; }
+      return inv;
+    }));
+    setSelectedInversionista({ ...selectedInversionista, inversiones: selectedInversionista.inversiones.filter(i => i.id !== inversionId) });
+  };
+
+  const handleSaveDistribucion = () => {
+    if (!distribucionForm.monto || !distribucionForm.fecha) { alert('Completa monto y fecha'); return; }
+    if (!selectedInversionista || !selectedInversion) return;
+    
+    const newDist: Distribucion = { id: Date.now().toString(), ...distribucionForm };
+    
+    setInversionistas(inversionistas.map(inv => {
+      if (inv.id === selectedInversionista.id) {
+        return { ...inv, inversiones: inv.inversiones.map(i => i.id === selectedInversion.id ? { ...i, distribuciones: [...i.distribuciones, newDist] } : i) };
+      }
+      return inv;
+    }));
+
+    setDistribucionForm({ monto: 0, fecha: '', concepto: 'rendimiento', notas: '' });
+    setInversionistasView('detail');
+    // Actualizar estado local
+    setSelectedInversion({ ...selectedInversion, distribuciones: [...selectedInversion.distribuciones, newDist] });
+    const updatedInv = inversionistas.find(i => i.id === selectedInversionista.id);
+    if (updatedInv) {
+      setSelectedInversionista({ ...updatedInv, inversiones: updatedInv.inversiones.map(i => i.id === selectedInversion.id ? { ...i, distribuciones: [...i.distribuciones, newDist] } : i) });
+    }
   };
 
   const getComprador = (id?: string) => compradores.find(c => c.id === id);
@@ -230,6 +353,11 @@ export default function HomePage() {
   const totalPendiente = unidadesConPagos.reduce((acc, u) => acc + (u.pagos || []).filter(p => p.status === 'pendiente' || p.status === 'vencido').reduce((a, p) => a + p.monto, 0), 0);
   const totalCobrado = unidadesConPagos.reduce((acc, u) => acc + (u.pagos || []).filter(p => p.status === 'pagado').reduce((a, p) => a + p.monto, 0), 0);
   const pagosVencidos = unidadesConPagos.reduce((acc, u) => acc + (u.pagos || []).filter(p => p.status === 'vencido').length, 0);
+
+  // Inversionistas stats
+  const totalInvertido = inversionistas.reduce((acc, inv) => acc + inv.inversiones.filter(i => i.status === 'activa').reduce((a, i) => a + i.monto, 0), 0);
+  const totalEnFeg = inversionistas.reduce((acc, inv) => acc + inv.inversiones.filter(i => i.feg?.activo).reduce((a, i) => a + (i.feg?.montoDepositado || 0), 0), 0);
+  const totalDistribuido = inversionistas.reduce((acc, inv) => acc + inv.inversiones.reduce((a, i) => a + i.distribuciones.reduce((d, dist) => d + dist.monto, 0), 0), 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-teal-800 to-emerald-900">
@@ -256,6 +384,186 @@ export default function HomePage() {
             <button onClick={() => handleSectionClick('construccion')} className="bg-white/10 backdrop-blur-sm rounded-3xl overflow-hidden shadow-lg border border-white/20 hover:bg-white/20 hover:scale-[1.02] transition-all duration-300 active:scale-95"><div className="w-full aspect-square overflow-hidden"><img src="/icon-construccion.png" alt="Construcción" className="w-full h-full object-cover" /></div><div className="p-3 text-center"><span className="text-white font-semibold text-lg block">Construcción</span><span className="text-white/50 text-xs">Avance de obra</span></div></button>
             <button onClick={() => handleSectionClick('gastos')} className="bg-white/10 backdrop-blur-sm rounded-3xl overflow-hidden shadow-lg border border-red-400/50 hover:bg-white/20 hover:scale-[1.02] transition-all duration-300 active:scale-95 relative"><div className="absolute top-2 right-2"><svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg></div><div className="w-full aspect-square overflow-hidden"><img src="/icon-gastos.png" alt="Gastos" className="w-full h-full object-cover" /></div><div className="p-3 text-center"><span className="text-white font-semibold text-lg block">Gastos</span><span className="text-red-300/70 text-xs">Acceso con PIN</span></div></button>
           </div>
+        ) : activeSection === 'inversionistas' ? (
+          <div className="animate-fadeIn">
+            <button onClick={() => { if (inversionistasView === 'list') setActiveSection(null); else if (inversionistasView === 'inversion' || inversionistasView === 'distribucion') setInversionistasView('detail'); else setInversionistasView('list'); }} className="mb-4 flex items-center gap-2 text-white/60 hover:text-white transition"><span>←</span> <span>Volver</span></button>
+
+            {inversionistasView === 'list' && (
+              <>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white">🏦 Inversionistas</h2>
+                  <button onClick={() => { setEditingInversionista(null); setInversionistaForm({ nombre: '', tipoPersona: 'fisica', rfc: '', email: '', telefono: '', documentos: [] }); setInversionistasView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600">+ Nuevo</button>
+                </div>
+                
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="bg-emerald-500/20 rounded-xl p-3 text-center"><div className="text-lg font-bold text-emerald-400">{formatMoney(totalInvertido)}</div><div className="text-xs text-white/60">Invertido</div></div>
+                  <div className="bg-blue-500/20 rounded-xl p-3 text-center"><div className="text-lg font-bold text-blue-400">{formatMoney(totalEnFeg)}</div><div className="text-xs text-white/60">En FEG</div></div>
+                  <div className="bg-purple-500/20 rounded-xl p-3 text-center"><div className="text-lg font-bold text-purple-400">{formatMoney(totalDistribuido)}</div><div className="text-xs text-white/60">Distribuido</div></div>
+                </div>
+
+                <div className="space-y-3">
+                  {inversionistas.length === 0 ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay inversionistas registrados</div>) : (
+                    inversionistas.map(inv => {
+                      const totalInv = inv.inversiones.filter(i => i.status === 'activa').reduce((a, i) => a + i.monto, 0);
+                      const totalDist = inv.inversiones.reduce((a, i) => a + i.distribuciones.reduce((d, dist) => d + dist.monto, 0), 0);
+                      return (
+                        <div key={inv.id} onClick={() => { setSelectedInversionista(inv); setInversionistasView('detail'); }} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 cursor-pointer hover:bg-white/20 transition">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h3 className="text-white font-semibold">{inv.nombre}</h3>
+                              <p className="text-white/60 text-sm">{inv.tipoPersona === 'fisica' ? 'Persona Física' : 'Persona Moral'}</p>
+                            </div>
+                            <span className="text-xs text-white/40">{inv.inversiones.length} inversión{inv.inversiones.length !== 1 ? 'es' : ''}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-emerald-400">{formatMoney(totalInv)}</span>
+                            {totalDist > 0 && <span className="text-purple-400">Dist: {formatMoney(totalDist)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
+
+            {inversionistasView === 'form' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 className="text-xl font-bold text-white mb-4">{editingInversionista ? 'Editar Inversionista' : 'Nuevo Inversionista'}</h2>
+                <div className="space-y-4">
+                  <div><label className="block text-white/60 text-sm mb-1">Nombre *</label><input type="text" value={inversionistaForm.nombre} onChange={e => setInversionistaForm({...inversionistaForm, nombre: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  <div><label className="block text-white/60 text-sm mb-1">Tipo</label><select value={inversionistaForm.tipoPersona} onChange={e => setInversionistaForm({...inversionistaForm, tipoPersona: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="fisica">Persona Física</option><option value="moral">Persona Moral</option></select></div>
+                  <div><label className="block text-white/60 text-sm mb-1">RFC</label><input type="text" value={inversionistaForm.rfc} onChange={e => setInversionistaForm({...inversionistaForm, rfc: e.target.value.toUpperCase()})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white uppercase" maxLength={13} /></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">Email</label><input type="email" value={inversionistaForm.email} onChange={e => setInversionistaForm({...inversionistaForm, email: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Teléfono</label><input type="text" value={inversionistaForm.telefono} onChange={e => setInversionistaForm({...inversionistaForm, telefono: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleSaveInversionista} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
+                    <button onClick={() => setInversionistasView('list')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {inversionistasView === 'detail' && selectedInversionista && (
+              <>
+                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 mb-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{selectedInversionista.nombre}</h2>
+                      <p className="text-white/60 text-sm">{selectedInversionista.tipoPersona === 'fisica' ? 'Persona Física' : 'Persona Moral'}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingInversionista(selectedInversionista); setInversionistaForm({ nombre: selectedInversionista.nombre, tipoPersona: selectedInversionista.tipoPersona, rfc: selectedInversionista.rfc, email: selectedInversionista.email, telefono: selectedInversionista.telefono, documentos: selectedInversionista.documentos }); setInversionistasView('form'); }} className="bg-blue-500 text-white p-2 rounded-lg text-sm">✏️</button>
+                      <button onClick={() => handleDeleteInversionista(selectedInversionista.id)} className="bg-red-500 text-white p-2 rounded-lg text-sm">🗑️</button>
+                    </div>
+                  </div>
+                  {selectedInversionista.rfc && <p className="text-white/60 text-sm">RFC: {selectedInversionista.rfc}</p>}
+                  {selectedInversionista.email && <p className="text-white/60 text-sm">📧 {selectedInversionista.email}</p>}
+                  {selectedInversionista.telefono && <p className="text-white/60 text-sm">📞 {selectedInversionista.telefono}</p>}
+                </div>
+
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold text-white">Inversiones</h3>
+                  <button onClick={() => { setSelectedInversion(null); setInversionForm({ monto: 0, fechaAportacion: '', tipo: 'desarrollo', porcentaje: 0, rendimientoPactado: 0, plazoMeses: 12, status: 'activa', usaFeg: false, fegBanco: '', fegNumero: '', fegMonto: 0, fegFecha: '' }); setInversionistasView('inversion'); }} className="bg-emerald-500 text-white py-2 px-3 rounded-xl text-sm font-semibold hover:bg-emerald-600">+ Inversión</button>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedInversionista.inversiones.length === 0 ? (<div className="bg-white/10 rounded-xl p-4 text-center text-white/60 text-sm">Sin inversiones registradas</div>) : (
+                    selectedInversionista.inversiones.map(inv => (
+                      <div key={inv.id} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className="text-xs text-white/40">{INVERSION_TIPO_LABELS[inv.tipo]}</span>
+                            <div className="text-white font-bold text-lg">{formatMoney(inv.monto)}</div>
+                          </div>
+                          <span className={`text-xs px-2 py-1 rounded-full ${inv.status === 'activa' ? 'bg-green-500' : 'bg-gray-500'} text-white`}>{inv.status}</span>
+                        </div>
+                        <div className="text-white/60 text-sm space-y-1">
+                          <p>📅 {inv.fechaAportacion}</p>
+                          {inv.plazoMeses && <p>⏱️ {inv.plazoMeses} meses</p>}
+                          {inv.rendimientoPactado && <p>📈 {inv.rendimientoPactado}% rendimiento</p>}
+                          {inv.feg?.activo && <p className="text-blue-400">🏦 FEG: {inv.feg.banco} - {formatMoney(inv.feg.montoDepositado)}</p>}
+                          {inv.distribuciones.length > 0 && <p className="text-purple-400">💸 {inv.distribuciones.length} distribución{inv.distribuciones.length !== 1 ? 'es' : ''}: {formatMoney(inv.distribuciones.reduce((a, d) => a + d.monto, 0))}</p>}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <button onClick={() => { setSelectedInversion(inv); setDistribucionForm({ monto: 0, fecha: '', concepto: 'rendimiento', notas: '' }); setInversionistasView('distribucion'); }} className="flex-1 bg-purple-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-purple-600">+ Distribución</button>
+                          <button onClick={() => { setSelectedInversion(inv); setInversionForm({ monto: inv.monto, fechaAportacion: inv.fechaAportacion, tipo: inv.tipo, porcentaje: inv.porcentaje || 0, rendimientoPactado: inv.rendimientoPactado || 0, plazoMeses: inv.plazoMeses || 12, status: inv.status, usaFeg: !!inv.feg?.activo, fegBanco: inv.feg?.banco || '', fegNumero: inv.feg?.numeroFideicomiso || '', fegMonto: inv.feg?.montoDepositado || 0, fegFecha: inv.feg?.fechaConstitucion || '' }); setInversionistasView('inversion'); }} className="bg-blue-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-blue-600">✏️</button>
+                          <button onClick={() => handleDeleteInversion(inv.id)} className="bg-red-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-red-600">🗑️</button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {inversionistasView === 'inversion' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 className="text-xl font-bold text-white mb-4">{selectedInversion ? 'Editar Inversión' : 'Nueva Inversión'}</h2>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">Monto *</label><input type="number" value={inversionForm.monto} onChange={e => setInversionForm({...inversionForm, monto: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Fecha Aportación *</label><input type="date" value={inversionForm.fechaAportacion} onChange={e => setInversionForm({...inversionForm, fechaAportacion: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">Tipo</label><select value={inversionForm.tipo} onChange={e => setInversionForm({...inversionForm, tipo: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="semilla">Capital Semilla</option><option value="desarrollo">Desarrollo</option><option value="otro">Otro</option></select></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Status</label><select value={inversionForm.status} onChange={e => setInversionForm({...inversionForm, status: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="activa">Activa</option><option value="liquidada">Liquidada</option></select></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">% Participación</label><input type="number" value={inversionForm.porcentaje} onChange={e => setInversionForm({...inversionForm, porcentaje: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Rendimiento %</label><input type="number" value={inversionForm.rendimientoPactado} onChange={e => setInversionForm({...inversionForm, rendimientoPactado: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Plazo (meses)</label><input type="number" value={inversionForm.plazoMeses} onChange={e => setInversionForm({...inversionForm, plazoMeses: parseInt(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  </div>
+                  
+                  {/* FEG Section */}
+                  <div className="p-4 bg-blue-500/10 rounded-xl border border-blue-500/30">
+                    <label className="flex items-center gap-3 cursor-pointer mb-3">
+                      <input type="checkbox" checked={inversionForm.usaFeg} onChange={e => setInversionForm({...inversionForm, usaFeg: e.target.checked})} className="w-5 h-5 rounded" />
+                      <span className="text-white font-medium">🏦 Fideicomiso en Garantía (FEG)</span>
+                    </label>
+                    {inversionForm.usaFeg && (
+                      <div className="space-y-3 mt-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div><label className="block text-white/60 text-sm mb-1">Banco</label><select value={inversionForm.fegBanco} onChange={e => setInversionForm({...inversionForm, fegBanco: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="">Seleccionar...</option>{BANCOS.map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                          <div><label className="block text-white/60 text-sm mb-1">No. Fideicomiso</label><input type="text" value={inversionForm.fegNumero} onChange={e => setInversionForm({...inversionForm, fegNumero: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div><label className="block text-white/60 text-sm mb-1">Monto Depositado</label><input type="number" value={inversionForm.fegMonto} onChange={e => setInversionForm({...inversionForm, fegMonto: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                          <div><label className="block text-white/60 text-sm mb-1">Fecha Constitución</label><input type="date" value={inversionForm.fegFecha} onChange={e => setInversionForm({...inversionForm, fegFecha: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleSaveInversion} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
+                    <button onClick={() => setInversionistasView('detail')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {inversionistasView === 'distribucion' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                <h2 className="text-xl font-bold text-white mb-4">Nueva Distribución</h2>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-white/60 text-sm mb-1">Monto *</label><input type="number" value={distribucionForm.monto} onChange={e => setDistribucionForm({...distribucionForm, monto: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                    <div><label className="block text-white/60 text-sm mb-1">Fecha *</label><input type="date" value={distribucionForm.fecha} onChange={e => setDistribucionForm({...distribucionForm, fecha: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  </div>
+                  <div><label className="block text-white/60 text-sm mb-1">Concepto</label><select value={distribucionForm.concepto} onChange={e => setDistribucionForm({...distribucionForm, concepto: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="rendimiento">Rendimiento</option><option value="devolucion">Devolución de Capital</option></select></div>
+                  <div><label className="block text-white/60 text-sm mb-1">Notas</label><input type="text" value={distribucionForm.notas} onChange={e => setDistribucionForm({...distribucionForm, notas: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleSaveDistribucion} className="flex-1 bg-purple-500 text-white py-3 rounded-xl font-semibold hover:bg-purple-600">Guardar</button>
+                    <button onClick={() => setInversionistasView('detail')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         ) : activeSection === 'pagos' ? (
           <div className="animate-fadeIn">
             <button onClick={() => { if (pagosView === 'list') setActiveSection(null); else if (pagosView === 'form') setPagosView('detail'); else setPagosView('list'); }} className="mb-4 flex items-center gap-2 text-white/60 hover:text-white transition"><span>←</span> <span>Volver</span></button>
@@ -263,60 +571,24 @@ export default function HomePage() {
             {pagosView === 'list' && (
               <>
                 <h2 className="text-xl font-bold text-white mb-4">💰 Cobranza</h2>
-                
-                {/* Stats */}
                 <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="bg-green-500/20 rounded-xl p-3 text-center">
-                    <div className="text-lg font-bold text-green-400">{formatMoney(totalCobrado)}</div>
-                    <div className="text-xs text-white/60">Cobrado</div>
-                  </div>
-                  <div className="bg-yellow-500/20 rounded-xl p-3 text-center">
-                    <div className="text-lg font-bold text-yellow-400">{formatMoney(totalPendiente)}</div>
-                    <div className="text-xs text-white/60">Pendiente</div>
-                  </div>
-                  <div className="bg-red-500/20 rounded-xl p-3 text-center">
-                    <div className="text-lg font-bold text-red-400">{pagosVencidos}</div>
-                    <div className="text-xs text-white/60">Vencidos</div>
-                  </div>
+                  <div className="bg-green-500/20 rounded-xl p-3 text-center"><div className="text-lg font-bold text-green-400">{formatMoney(totalCobrado)}</div><div className="text-xs text-white/60">Cobrado</div></div>
+                  <div className="bg-yellow-500/20 rounded-xl p-3 text-center"><div className="text-lg font-bold text-yellow-400">{formatMoney(totalPendiente)}</div><div className="text-xs text-white/60">Pendiente</div></div>
+                  <div className="bg-red-500/20 rounded-xl p-3 text-center"><div className="text-lg font-bold text-red-400">{pagosVencidos}</div><div className="text-xs text-white/60">Vencidos</div></div>
                 </div>
-
-                {/* Lista de unidades con pagos */}
                 <div className="space-y-3">
-                  {unidadesConPagos.length === 0 ? (
-                    <div className="bg-white/10 rounded-xl p-6 text-center text-white/60">
-                      <p>No hay unidades con pagos</p>
-                      <p className="text-sm mt-2">Asigna un comprador a una unidad en Inventario</p>
-                    </div>
-                  ) : (
+                  {unidadesConPagos.length === 0 ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60"><p>No hay unidades con pagos</p><p className="text-sm mt-2">Asigna un comprador a una unidad en Inventario</p></div>) : (
                     unidadesConPagos.map(u => {
                       const comprador = getComprador(u.compradorId);
                       const pagos = u.pagos || [];
                       const pendientes = pagos.filter(p => p.status === 'pendiente' || p.status === 'vencido');
                       const totalUnidad = pagos.reduce((a, p) => a + p.monto, 0);
                       const pagadoUnidad = pagos.filter(p => p.status === 'pagado').reduce((a, p) => a + p.monto, 0);
-                      
                       return (
                         <div key={u.id} onClick={() => { setSelectedUnidadPago(u); setPagosView('detail'); }} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 cursor-pointer hover:bg-white/20 transition">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h3 className="text-white font-semibold">{u.nombre}</h3>
-                              <p className="text-white/60 text-sm">{comprador?.name || 'Sin comprador'}</p>
-                            </div>
-                            <span className={`${STATUS_COLORS[u.status]} text-white text-xs px-2 py-1 rounded-full`}>{STATUS_LABELS[u.status]}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <div className="text-sm">
-                              <span className="text-green-400">{formatMoney(pagadoUnidad)}</span>
-                              <span className="text-white/40"> / {formatMoney(totalUnidad)}</span>
-                            </div>
-                            {pendientes.length > 0 && (
-                              <span className="text-yellow-400 text-sm">{pendientes.length} pendiente{pendientes.length > 1 ? 's' : ''}</span>
-                            )}
-                          </div>
-                          {/* Progress bar */}
-                          <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${totalUnidad > 0 ? (pagadoUnidad / totalUnidad) * 100 : 0}%` }}></div>
-                          </div>
+                          <div className="flex justify-between items-start mb-2"><div><h3 className="text-white font-semibold">{u.nombre}</h3><p className="text-white/60 text-sm">{comprador?.name || 'Sin comprador'}</p></div><span className={`${STATUS_COLORS[u.status]} text-white text-xs px-2 py-1 rounded-full`}>{STATUS_LABELS[u.status]}</span></div>
+                          <div className="flex justify-between items-center"><div className="text-sm"><span className="text-green-400">{formatMoney(pagadoUnidad)}</span><span className="text-white/40"> / {formatMoney(totalUnidad)}</span></div>{pendientes.length > 0 && (<span className="text-yellow-400 text-sm">{pendientes.length} pendiente{pendientes.length > 1 ? 's' : ''}</span>)}</div>
+                          <div className="mt-2 h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${totalUnidad > 0 ? (pagadoUnidad / totalUnidad) * 100 : 0}%` }}></div></div>
                         </div>
                       );
                     })
@@ -328,40 +600,16 @@ export default function HomePage() {
             {pagosView === 'detail' && selectedUnidadPago && (
               <>
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 mb-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h2 className="text-xl font-bold text-white">{selectedUnidadPago.nombre}</h2>
-                      <p className="text-white/60">{getComprador(selectedUnidadPago.compradorId)?.name || 'Sin comprador'}</p>
-                    </div>
-                    <button onClick={() => { setEditingPago(null); setPagoForm({ monto: 0, fecha: '', tipo: 'mensualidad', status: 'pendiente', notas: '' }); setPagosView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600 text-sm">+ Pago</button>
-                  </div>
+                  <div className="flex justify-between items-start"><div><h2 className="text-xl font-bold text-white">{selectedUnidadPago.nombre}</h2><p className="text-white/60">{getComprador(selectedUnidadPago.compradorId)?.name || 'Sin comprador'}</p></div><button onClick={() => { setEditingPago(null); setPagoForm({ monto: 0, fecha: '', tipo: 'mensualidad', status: 'pendiente', notas: '' }); setPagosView('form'); }} className="bg-emerald-500 text-white py-2 px-4 rounded-xl font-semibold hover:bg-emerald-600 text-sm">+ Pago</button></div>
                 </div>
-
                 <div className="space-y-3">
-                  {(!selectedUnidadPago.pagos || selectedUnidadPago.pagos.length === 0) ? (
-                    <div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay pagos registrados</div>
-                  ) : (
+                  {(!selectedUnidadPago.pagos || selectedUnidadPago.pagos.length === 0) ? (<div className="bg-white/10 rounded-xl p-6 text-center text-white/60">No hay pagos registrados</div>) : (
                     selectedUnidadPago.pagos.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()).map(p => (
                       <div key={p.id} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <span className="text-xs text-white/40">{PAGO_TIPO_LABELS[p.tipo]}</span>
-                            <div className="text-white font-bold text-lg">{formatMoney(p.monto)}</div>
-                          </div>
-                          <span className={`${PAGO_STATUS_COLORS[p.status]} text-white text-xs px-2 py-1 rounded-full`}>{p.status}</span>
-                        </div>
-                        <div className="text-white/60 text-sm mb-2">
-                          <span>Vence: {p.fecha}</span>
-                          {p.fechaPago && <span className="ml-3 text-green-400">Pagado: {p.fechaPago}</span>}
-                        </div>
+                        <div className="flex justify-between items-start mb-2"><div><span className="text-xs text-white/40">{PAGO_TIPO_LABELS[p.tipo]}</span><div className="text-white font-bold text-lg">{formatMoney(p.monto)}</div></div><span className={`${PAGO_STATUS_COLORS[p.status]} text-white text-xs px-2 py-1 rounded-full`}>{p.status}</span></div>
+                        <div className="text-white/60 text-sm mb-2"><span>Vence: {p.fecha}</span>{p.fechaPago && <span className="ml-3 text-green-400">Pagado: {p.fechaPago}</span>}</div>
                         {p.notas && <p className="text-white/40 text-sm">{p.notas}</p>}
-                        <div className="flex gap-2 mt-3">
-                          {p.status !== 'pagado' && (
-                            <button onClick={() => handleMarcarPagado(p)} className="flex-1 bg-green-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-600">✓ Marcar pagado</button>
-                          )}
-                          <button onClick={() => { setEditingPago(p); setPagoForm({ monto: p.monto, fecha: p.fecha, tipo: p.tipo, status: p.status, notas: p.notas || '' }); setPagosView('form'); }} className="bg-blue-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-blue-600">✏️</button>
-                          <button onClick={() => handleDeletePago(p.id)} className="bg-red-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-red-600">🗑️</button>
-                        </div>
+                        <div className="flex gap-2 mt-3">{p.status !== 'pagado' && (<button onClick={() => handleMarcarPagado(p)} className="flex-1 bg-green-500 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-600">✓ Marcar pagado</button>)}<button onClick={() => { setEditingPago(p); setPagoForm({ monto: p.monto, fecha: p.fecha, tipo: p.tipo, status: p.status, notas: p.notas || '' }); setPagosView('form'); }} className="bg-blue-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-blue-600">✏️</button><button onClick={() => handleDeletePago(p.id)} className="bg-red-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-red-600">🗑️</button></div>
                       </div>
                     ))
                   )}
@@ -375,15 +623,9 @@ export default function HomePage() {
                 <div className="space-y-4">
                   <div><label className="block text-white/60 text-sm mb-1">Monto *</label><input type="number" value={pagoForm.monto} onChange={e => setPagoForm({...pagoForm, monto: parseFloat(e.target.value) || 0})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
                   <div><label className="block text-white/60 text-sm mb-1">Fecha Vencimiento *</label><input type="date" value={pagoForm.fecha} onChange={e => setPagoForm({...pagoForm, fecha: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-white/60 text-sm mb-1">Tipo</label><select value={pagoForm.tipo} onChange={e => setPagoForm({...pagoForm, tipo: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="enganche">Enganche</option><option value="mensualidad">Mensualidad</option><option value="extraordinario">Extraordinario</option></select></div>
-                    <div><label className="block text-white/60 text-sm mb-1">Status</label><select value={pagoForm.status} onChange={e => setPagoForm({...pagoForm, status: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="pendiente">Pendiente</option><option value="pagado">Pagado</option><option value="vencido">Vencido</option></select></div>
-                  </div>
+                  <div className="grid grid-cols-2 gap-4"><div><label className="block text-white/60 text-sm mb-1">Tipo</label><select value={pagoForm.tipo} onChange={e => setPagoForm({...pagoForm, tipo: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="enganche">Enganche</option><option value="mensualidad">Mensualidad</option><option value="extraordinario">Extraordinario</option></select></div><div><label className="block text-white/60 text-sm mb-1">Status</label><select value={pagoForm.status} onChange={e => setPagoForm({...pagoForm, status: e.target.value as any})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white"><option value="pendiente">Pendiente</option><option value="pagado">Pagado</option><option value="vencido">Vencido</option></select></div></div>
                   <div><label className="block text-white/60 text-sm mb-1">Notas</label><input type="text" value={pagoForm.notas} onChange={e => setPagoForm({...pagoForm, notas: e.target.value})} className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white" /></div>
-                  <div className="flex gap-3 pt-4">
-                    <button onClick={handleSavePago} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button>
-                    <button onClick={() => setPagosView('detail')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button>
-                  </div>
+                  <div className="flex gap-3 pt-4"><button onClick={handleSavePago} className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-semibold hover:bg-emerald-600">Guardar</button><button onClick={() => setPagosView('detail')} className="bg-white/20 text-white py-3 px-6 rounded-xl hover:bg-white/30">Cancelar</button></div>
                 </div>
               </div>
             )}
